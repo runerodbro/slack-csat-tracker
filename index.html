@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Hello, World</title>
+  <style>
+    :root {
+      --bg: #0b0b1a;
+      --fg: #f5f5ff;
+      --muted: #a0a3c4;
+      --a: #ff6ec4;
+      --b: #7873f5;
+      --c: #4ade80;
+    }
+    @media (prefers-color-scheme: light) {
+      :root { --bg: #f7f7fc; --fg: #14142b; --muted: #5b5e7a; }
+    }
+    * { box-sizing: border-box; margin: 0; }
+    html, body { height: 100%; }
+    body {
+      display: grid;
+      place-items: center;
+      background: var(--bg);
+      color: var(--fg);
+      font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+      overflow: hidden;
+      padding: 16px;
+    }
+    .blob {
+      position: fixed;
+      width: 45vmax;
+      height: 45vmax;
+      border-radius: 50%;
+      filter: blur(90px);
+      opacity: .45;
+      animation: float 18s ease-in-out infinite alternate;
+      z-index: 0;
+    }
+    .blob.one   { background: var(--a); top: -15vmax; left: -10vmax; }
+    .blob.two   { background: var(--b); bottom: -15vmax; right: -10vmax; animation-delay: -6s; }
+    .blob.three { background: var(--c); top: 40%; left: 50%; width: 25vmax; height: 25vmax; opacity: .25; animation-delay: -12s; }
+    @keyframes float {
+      to { transform: translate(8vmax, 6vmax) scale(1.15); }
+    }
+    .card {
+      position: relative;
+      z-index: 1;
+      text-align: center;
+      padding: clamp(2rem, 6vw, 4rem) clamp(1.5rem, 8vw, 5rem);
+      border-radius: 28px;
+      background: color-mix(in srgb, var(--bg) 55%, transparent);
+      border: 1px solid color-mix(in srgb, var(--fg) 12%, transparent);
+      backdrop-filter: blur(18px);
+      box-shadow: 0 30px 80px rgba(0,0,0,.35);
+      animation: rise .9s cubic-bezier(.2,.8,.2,1) both;
+    }
+    @keyframes rise {
+      from { opacity: 0; transform: translateY(24px) scale(.97); }
+    }
+    h1 {
+      font-size: clamp(3rem, 12vw, 7.5rem);
+      font-weight: 800;
+      letter-spacing: -0.04em;
+      line-height: 1;
+      background: linear-gradient(90deg, var(--a), var(--b), var(--c), var(--a));
+      background-size: 300% 100%;
+      -webkit-background-clip: text;
+      background-clip: text;
+      color: transparent;
+      animation: shimmer 6s linear infinite;
+    }
+    @keyframes shimmer {
+      to { background-position: 300% 0; }
+    }
+    p {
+      margin-top: 1.25rem;
+      font-size: clamp(1rem, 2.5vw, 1.25rem);
+      color: var(--muted);
+      letter-spacing: .02em;
+    }
+    .wave {
+      display: inline-block;
+      animation: wave 2.4s ease-in-out infinite;
+      transform-origin: 70% 70%;
+    }
+    @keyframes wave {
+      0%, 60%, 100% { transform: rotate(0); }
+      10%, 30% { transform: rotate(14deg); }
+      20% { transform: rotate(-8deg); }
+      40% { transform: rotate(-4deg); }
+      50% { transform: rotate(10deg); }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after { animation: none !important; }
+    }
+  </style>
+</head>
+<body>
+  <div class="blob one"></div>
+  <div class="blob two"></div>
+  <div class="blob three"></div>
+
+  <main class="card">
+    <h1>Hello, World</h1>
+    <p><span class="wave">👋</span> Nice to meet you.</p>
+  </main>
+</body>
+</html>
