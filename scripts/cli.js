@@ -17,7 +17,11 @@ async function main() {
   switch (command) {
     case "backfill": {
       const days = Number(arg || 365);
-      const saved = await app.jobs.backfill({ days });
+      console.log(`Importing ratings from the last ${days} days...`);
+      const saved = await app.jobs.backfill({
+        days,
+        onProgress: ({ seen, saved }) => console.log(`  ${seen} conversations checked, ${saved} new ratings saved`),
+      });
       console.log(`Saved ${saved} ratings from the last ${days} days.`);
       console.log(app.ratings.currentStreak());
       break;

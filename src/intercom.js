@@ -50,7 +50,8 @@ function createIntercom({ token, clientSecret, apiUrl, appUrl, workspaceId }) {
         pagination: { per_page: 150, ...(startingAfter && { starting_after: startingAfter }) },
       });
       for (const conversation of data.conversations || []) yield conversation;
-      startingAfter = data.pages?.next?.starting_after;
+      const next = data.pages?.next?.starting_after;
+      startingAfter = next && next !== startingAfter ? next : null; // stop if the cursor repeats
     } while (startingAfter);
   }
 

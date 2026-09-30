@@ -61,14 +61,17 @@ function createJobs({ db, intercom, slack, clock, ratings, queue, log = console 
   }
 
   // Imports history without Slack posts, so the streak record starts correct.
-  async function backfill({ days }) {
+  async function backfill({ days, onProgress = () => {} }) {
+    let seen = 0;
     let saved = 0;
     for await (const conv of intercom.searchRated(nowSeconds() - days * 86400)) {
       const result = await ratings.processConversation(conv.id, {
         conversation: conv.conversation_rating === undefined ? null : conv,
         post: false,
       });
+      seen++;
       if (result === "saved") saved++;
+      if (seen % 50 === 0) onProgress({ seen, saved });
     }
     return saved;
   }
