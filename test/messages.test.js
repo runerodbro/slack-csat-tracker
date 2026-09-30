@@ -16,9 +16,9 @@ test("rating message: fields, escaping, red bar for negative", () => {
   assert.match(json, /https:\/\/x\/1/);
 });
 
-test("rating message: red bar for positive too, no Slack user falls back to name", () => {
+test("rating message: gray bar for positive, no Slack user falls back to name", () => {
   const msg = ratingMessage({ rating: { ...rating, score: 5, remark: null }, url: "u" });
-  assert.equal(msg.attachments[0].color, "#EE2737");
+  assert.equal(msg.attachments[0].color, "#B6BBBF");
   assert.match(JSON.stringify(msg), /\*Assignee\*\\nAnn/);
   assert.match(JSON.stringify(msg), /No comment/);
 });
@@ -26,6 +26,9 @@ test("rating message: red bar for positive too, no Slack user falls back to name
 test("streak message marks a new record", () => {
   const msg = streakMessage({ current: 12, since: "2026-09-18", record: { length: 9, from: "2026-08-01", to: "2026-08-10" }, isNewRecord: true });
   assert.match(msg.text, /NEW RECORD/);
+  assert.equal(msg.attachments[0].color, "#EE2737");
+  const normal = streakMessage({ current: 5, since: "2026-09-25", record: { length: 9, from: "2026-08-01", to: "2026-08-10" }, isNewRecord: false });
+  assert.equal(normal.attachments[0].color, "#B6BBBF");
 });
 
 test("streak message: last negative date and record range starting the day after the break", () => {

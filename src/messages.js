@@ -1,14 +1,18 @@
 // Slack Block Kit messages. Pure functions: data in, message payload out.
 //
 // The colored side bar comes from a legacy attachment with blocks inside it.
-// All posts use Imperial Red from the iPaper palette. Dark Blue was nearly
-// invisible in Slack's dark theme. A restored break uses gray to look inactive.
+// The color shows the situation, with colors from the iPaper palette:
+// Imperial Red for what needs attention (negative rating, broken streak,
+// new record), Gray 3 for everything else. Gray 3 shows in both Slack's light
+// and dark theme; Dark Blue was nearly invisible in the dark theme.
 
 const { formatDate, addDays } = require("./time");
 const { isNegative } = require("./streak");
 
 const IMPERIAL_RED = "#EE2737";
 const GRAY = "#B6BBBF";
+
+const alert = (yes) => (yes ? IMPERIAL_RED : GRAY);
 
 const SCORES = {
   1: { emoji: "😠", label: "Terrible" },
@@ -78,7 +82,7 @@ function ratingMessage({ rating, url, assigneeSlackId, change }) {
   }
   return wrap(
     `${s.emoji} CSAT ${rating.score}/5 for ${rating.admin_name || "unassigned"}`,
-    IMPERIAL_RED,
+    alert(isNegative(rating.score)),
     blocks,
   );
 }
@@ -98,7 +102,7 @@ function streakMessage(streak) {
   if (streak.since) fields.push(field("Last negative rating", formatDate(streak.since)));
   return wrap(
     streak.isNewRecord ? `NEW RECORD: CSAT streak ${days(streak.current)}` : `CSAT streak: ${days(streak.current)}`,
-    IMPERIAL_RED,
+    alert(streak.isNewRecord),
     [
       { type: "section", text: { type: "mrkdwn", text: headline } },
       { type: "section", fields },
