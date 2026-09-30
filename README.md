@@ -1,27 +1,32 @@
 # slack-csat-tracker
 
-Posts Intercom CSAT ratings to Slack, keeps a streak of days without negative
-ratings, and sends a weekly report.
+Posts Intercom CSAT ratings to Slack, counts the streak of days with 100%
+positive ratings, celebrates records, and sends a weekly report.
 
 ## What it does
 
 - **Rating posts.** Each Intercom rating (1–5) is posted to Slack 5 minutes
-  after it arrives, with assignee, customer, rating, comment and a link to the
-  conversation. If the customer changes the rating within the 5 minutes, only
-  the final rating is posted. If it changes later, the Slack message is updated.
-- **Streak.** The streak is the number of days since the last day with a
-  negative rating (1–3). Days with no ratings count. A negative rating on
-  Tuesday gives a streak of 1 on Wednesday morning.
-  - Morning post: Monday to Friday at 08:30 Copenhagen time, with the record
-    and **NEW RECORD** (gold) when the current streak beats it.
+  after it arrives, with assignee (@mention when the email matches a Slack
+  user), customer, rating, comment and a link to the conversation. If the
+  customer changes the rating within the 5 minutes, only the final rating is
+  posted. If it changes later, the Slack message is updated.
+- **Streak.** The number of days since the last day with a 1–3 rating. Days
+  with no ratings count. A 1–3 rating on Tuesday gives a streak of 1 on
+  Wednesday morning.
+  - Morning post: Monday to Friday at 08:30 Copenhagen time, for example
+    "🔥 CSAT streak: 296 days of 100% positive ratings", with the record and
+    the date the streak started.
+  - When the current streak is longer than the record, the post is gold and
+    says "🏆 NEW RECORD!", with the number of days past the old record.
   - Big celebration on the first record post of a streak and on milestones
-    (every 50 days, every full year): header, streak statistics, thanks with
-    @mentions of the top 5 agents in the streak, and 🎉🏆 reactions.
-  - A negative rating posts "Streak has been broken 😭" at once (after the
-    5-minute delay), with the length and whether it beat the record. Only the
-    first negative rating of a day posts this.
-  - If a positive rating is changed to negative later, the streak breaks then.
-    If a negative rating is changed to positive, the break message is updated
+    (every 50 days, every full year): a header, statistics for the streak,
+    thanks with @mentions of the 5 agents with the most ratings in the streak,
+    and 🎉🏆 reactions. A milestone on a weekend is celebrated on Monday.
+  - A 1–3 rating posts "Streak has been broken 😭" after the 5-minute delay,
+    with how long the streak lasted and whether it beat the record. Only the
+    first 1–3 rating of a day posts this.
+  - If a positive rating is changed to 1–3 later, the streak breaks then. If a
+    1–3 rating is changed to positive, the break post is updated to "restored"
     and the streak is calculated again.
 - **Weekly report.** Friday at 14:00 Copenhagen time, for Friday 14:00 to
   Friday 14:00: number of ratings, average, % positive, distribution, and the
@@ -29,34 +34,146 @@ ratings, and sends a weekly report.
 - **Reconciliation.** Every hour the app asks Intercom for ratings from the
   last 3 days and processes any the webhook missed.
 
-## Setup
+### Side bar colors
 
-Needs Node.js 22.13 or later. No npm packages; it uses Node's built-in SQLite.
+| Post | Color |
+|---|---|
+| Rating 4–5, normal streak post | Green `#1F9D63` |
+| Rating 1–3, streak broken | Imperial Red `#EE2737` |
+| NEW RECORD | Gold `#D4A017` |
+| Break restored | Gray 3 `#B6BBBF` |
+| Weekly report | No side bar (plain blocks, so Slack does not collapse it) |
 
-1. `cp .env.example .env` and fill it in.
-2. `npm run db:init` creates the database.
-3. Import history so the streak record is correct:
-   `node --env-file=.env scripts/cli.js backfill 365`
-4. `npm start`
+Green and gold are outside the iPaper palette by choice. Green has at least 3:1
+contrast on Slack's light and dark theme; gold is fainter on the light theme.
 
-Intercom: subscribe the app's webhook to `conversation.rating.added` with the
-URL `https://<host>/csat/webhooks/intercom`.
+### Schedule and restarts
 
-Slack: the bot needs `chat:write`. Add `users:read` and `users:read.email` to
-@mention agents, and `reactions:write` for the celebration reactions. Invite
-the bot to the channel.
+Each scheduled post runs once per period. If the server was down at the
+planned time, the post still goes out when it comes back inside the window:
 
-Server files: `deploy/csat.service` (systemd) and `deploy/nginx-csat.conf`.
+| Post | Window |
+|---|---|
+| Morning streak | Monday–Friday 08:30–11:00 |
+| Weekly report | Friday 14:00–18:00 |
+
+So a start inside a window posts right away. Start the service outside these
+windows if you do not want that.
+
+## Requirements
+
+- Node.js 22.13 or later. No npm packages; the app uses Node's built-in SQLite.
+- **Intercom:** a private app in the Developer Hub with these scopes:
+  Read conversations, Read admins, and Read one user and one company (or Read
+  and list users and companies). Subscribe the app's webhook to
+  `conversation.rating.added` with the URL
+  `https://middleware.ipaperdemo.io/csat/webhooks/intercom`.
+- **Slack:** an app with a bot token and these scopes: `chat:write`;
+  `users:read` and `users:read.email` for @mentions; `reactions:write` for the
+  celebration reactions. Invite the bot to the channel. Missing optional
+  scopes are skipped quietly.
+
+## Settings (`.env`)
+
+See `.env.example`. Required: `INTERCOM_ACCESS_TOKEN`, `INTERCOM_CLIENT_SECRET`,
+`SLACK_BOT_TOKEN`, `SLACK_CHANNEL_ID`, `DB_PATH`.
+
+`STREAK_START_DATE` sets the first day the streak and record count from. Use it
+to skip periods without real CSAT data. Without it, the app counts from the
+oldest saved rating, and a period with no data looks like a long streak.
+Production uses `STREAK_START_DATE=2023-10-01`, because February to October
+2023 was a test of another CSAT method.
+
+To change `.env` on the server, paste the whole file at once:
+
+```bash
+cat > /opt/csat/.env <<'EOF'
+...all settings...
+EOF
+chown csat:csat /opt/csat/.env && chmod 600 /opt/csat/.env
+systemctl restart csat
+```
+
+Start the paste with a space, so bash does not save the keys in its history.
+
+## Server layout
+
+| What | Where |
+|---|---|
+| Code | `/opt/csat` (outside the web root) |
+| Settings | `/opt/csat/.env`, owner `csat`, mode 600 |
+| Database | `/var/lib/csat/csat.db` |
+| Backups | `/var/backups/csat`, nightly at 03:15, kept 14 days (`/etc/cron.d/csat-backup`) |
+| Service | `csat` (systemd), runs as user `csat` |
+| nginx | `/csat/` is forwarded to `127.0.0.1:3000` |
+
+### First setup
+
+```bash
+useradd --system --home /opt/csat --shell /usr/sbin/nologin csat
+mkdir -p /var/lib/csat /var/backups/csat && chown csat:csat /var/lib/csat /var/backups/csat
+cd /opt/csat
+sudo -u csat node --env-file=.env --disable-warning=ExperimentalWarning src/db.js
+sudo -u csat node --env-file=.env --disable-warning=ExperimentalWarning scripts/cli.js backfill 1095
+cp deploy/csat.service /etc/systemd/system/ && systemctl daemon-reload && systemctl enable --now csat
+```
+
+Put the blocks from `deploy/nginx-csat.conf` in the HTTPS `server { }` block,
+then `nginx -t && systemctl reload nginx`. Check with
+`curl https://middleware.ipaperdemo.io/csat/health` (expect `ok`).
+
+### Deploy a new version
+
+`/usr/local/bin/csat-deploy [branch]` (default `main`) checks out the latest
+version of the branch in `/opt/csat` and restarts the service.
+
+### Logs
+
+```bash
+journalctl -u csat -f
+```
 
 ## Commands
 
+Run on the server from `/opt/csat`, as the app user:
+
+```bash
+sudo -u csat node --env-file=.env --disable-warning=ExperimentalWarning scripts/cli.js <command>
 ```
-node --env-file=.env scripts/cli.js streak              # print the streak, no post
-node --env-file=.env scripts/cli.js morning             # post the streak now
-node --env-file=.env scripts/cli.js weekly [YYYY-MM-DD] # post the weekly report now
-node --env-file=.env scripts/cli.js reconcile           # look for missed ratings
-node --env-file=.env scripts/cli.js post <id>           # process one conversation now
+
+| Command | What it does |
+|---|---|
+| `backfill [days]` | Imports ratings from the last N days (default 365) without Slack posts. Shows progress. Safe to run again. |
+| `streak` | Prints the streak and record. No post. |
+| `morning` | Posts the streak now. A test run does not use up a celebration. |
+| `weekly [YYYY-MM-DD]` | Posts the weekly report for the Friday given, default the last report Friday. |
+| `reconcile` | Looks for ratings the webhook missed. |
+| `post <conversation-id>` | Processes one conversation now. |
+
+To post in a test channel: `sudo -u csat env SLACK_CHANNEL_ID=C0123 node ...`
+
+Useful database queries:
+
+```bash
+# Ratings per month
+sqlite3 -header -column /var/lib/csat/csat.db "SELECT strftime('%Y-%m', rated_at, 'unixepoch') AS month, COUNT(*) AS ratings, SUM(score <= 3) AS negative, ROUND(AVG(score), 2) AS avg FROM ratings GROUP BY month ORDER BY month;"
+# Days with a 1–3 rating
+sqlite3 -header -column /var/lib/csat/csat.db "SELECT date(rated_at, 'unixepoch') AS day, score FROM ratings WHERE score <= 3 ORDER BY rated_at;"
+```
+
+## Troubleshooting
+
+| Error | Cause and fix |
+|---|---|
+| `node: .env: not found` | The command ran outside `/opt/csat`. Run `cd /opt/csat` first. |
+| `Intercom ... 401 token_unauthorized` | The Intercom app misses a scope. Add it in the Developer Hub (see Requirements). |
+| `Slack ...: not_in_channel` | Invite the bot to the channel. |
+| A streak or record that looks too long | A period without CSAT data. Set `STREAK_START_DATE` after it. |
+
+## Development
+
+```bash
 npm test
 ```
 
-Set `SLACK_CHANNEL_ID=C0123` in front of a command to post in a test channel.
+Tests use fake Intercom and Slack APIs and an in-memory database.
