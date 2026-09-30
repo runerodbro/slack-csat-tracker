@@ -42,7 +42,8 @@ URL `https://<host>/csat/webhooks/intercom`.
 Slack: the bot needs `chat:write`. Add `users:read` and `users:read.email` to
 @mention the assignee. Invite the bot to the channel.
 
-Server files: `deploy/csat.service` (systemd) and `deploy/nginx-csat.conf`.
+Server files: `deploy/csat.service` (systemd), `deploy/nginx-csat.conf`, and
+`deploy/csat-env` (run `csat-env` to list settings, `csat-env NAME` to change one).
 
 ## Commands
 
