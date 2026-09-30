@@ -13,9 +13,9 @@ function highestMilestone(days) {
 function milestoneTitle(days) {
   if (days % 365 === 0) {
     const years = days / 365;
-    return `🎉 ${years === 1 ? "One full year" : `${years} full years`} without a negative rating! 🎉`;
+    return `🎉 ${years === 1 ? "One full year" : `${years} full years`} of 100% positive ratings! 🎉`;
   }
-  return `🎉 ${days} days without a negative rating! 🎉`;
+  return `🎉 ${days} days of 100% positive ratings! 🎉`;
 }
 
 // celebrated: Set of keys already celebrated. Returns { title, keys } or null.

@@ -101,8 +101,8 @@ function recordText(record) {
 // celebration (optional): { title, count, fiveStar, average, agents: [{ name, slackId, count }] }
 function streakMessage(streak, celebration = null) {
   const headline = streak.isNewRecord
-    ? `🏆 *NEW RECORD!* ${days(streak.current)} without a negative rating`
-    : `🔥 *CSAT streak: ${days(streak.current)}* without a negative rating`;
+    ? `🏆 *NEW RECORD!* ${days(streak.current)} of 100% positive ratings`
+    : `🔥 *CSAT streak: ${days(streak.current)}* of 100% positive ratings`;
   const fields = [field("Current streak", days(streak.current))];
   if (streak.isNewRecord) {
     fields.push(field("Old record", recordText(streak.record)));
@@ -110,7 +110,8 @@ function streakMessage(streak, celebration = null) {
   } else {
     fields.push(field("Record", recordText(streak.record)));
   }
-  if (streak.since) fields.push(field("Last negative rating", formatDate(streak.since)));
+  // since is the day of the last break; the streak starts the day after.
+  if (streak.since) fields.push(field("Streak started", formatDate(addDays(streak.since, 1))));
 
   const blocks = [];
   if (celebration) blocks.push({ type: "header", text: { type: "plain_text", text: celebration.title, emoji: true } });

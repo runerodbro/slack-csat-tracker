@@ -31,9 +31,11 @@ test("streak message marks a new record", () => {
   assert.equal(normal.attachments[0].color, "#1F9D63");
 });
 
-test("streak message: last negative date and record range starting the day after the break", () => {
+test("streak message: positive wording, start date and record range start the day after the break", () => {
   const msg = streakMessage({ current: 296, since: "2025-12-08", record: { length: 310, from: "2023-02-06", to: "2023-12-13" }, isNewRecord: false });
   const json = JSON.stringify(msg);
-  assert.match(json, /Last negative rating\*\\n8 Dec 2025/);
+  assert.match(json, /Streak started\*\\n9 Dec 2025/);
+  assert.match(json, /296 days\* of 100% positive ratings/);
+  assert.doesNotMatch(json, /negative/);
   assert.match(json, /310 days \(7 Feb 2023 – 13 Dec 2023\)/);
 });
