@@ -4,7 +4,7 @@
 // Colors are from the iPaper palette: Dark Blue for normal posts, Imperial Red
 // as the accent for negative ratings, broken streaks and new records.
 
-const { formatDate } = require("./time");
+const { formatDate, addDays } = require("./time");
 const { isNegative } = require("./streak");
 
 const DARK_BLUE = "#091722";
@@ -86,7 +86,8 @@ function ratingMessage({ rating, url, assigneeSlackId, change }) {
 
 function recordText(record) {
   if (!record) return "No record yet. This is the first streak.";
-  return `${days(record.length)} (${formatDate(record.from)} – ${formatDate(record.to)})`;
+  // record.from is the day of the break before it, so the first counted day is the next one.
+  return `${days(record.length)} (${formatDate(addDays(record.from, 1))} – ${formatDate(record.to)})`;
 }
 
 // streak: result of computeStreak().
@@ -95,7 +96,7 @@ function streakMessage(streak) {
     ? `🏆 *NEW RECORD!* ${days(streak.current)} without a negative rating`
     : `🔥 *CSAT streak: ${days(streak.current)}* without a negative rating`;
   const fields = [field("Current streak", days(streak.current)), field("Record", recordText(streak.record))];
-  if (streak.since) fields.push(field("Streak started", formatDate(streak.since)));
+  if (streak.since) fields.push(field("Last negative rating", formatDate(streak.since)));
   return wrap(
     streak.isNewRecord ? `NEW RECORD: CSAT streak ${days(streak.current)}` : `CSAT streak: ${days(streak.current)}`,
     streak.isNewRecord ? IMPERIAL_RED : DARK_BLUE,
@@ -165,7 +166,7 @@ function weeklyMessage({ stats, from, to }) {
   ];
   if (!stats.total) {
     blocks.push({ type: "section", text: { type: "mrkdwn", text: "No ratings this week." } });
-    return wrap("Weekly CSAT report: no ratings this week", DARK_BLUE, blocks);
+    return { text: "Weekly CSAT report: no ratings this week", blocks };
   }
 
   blocks.push({
@@ -193,7 +194,8 @@ function weeklyMessage({ stats, from, to }) {
     .join("\n");
   blocks.push({ type: "section", text: { type: "mrkdwn", text: `*Top agents*\n${agents}` } });
 
-  return wrap(`Weekly CSAT report: ${stats.total} ratings, average ${stats.average.toFixed(2)}`, DARK_BLUE, blocks);
+  // Plain blocks, not an attachment: Slack collapses long attachments behind "Show more".
+  return { text: `Weekly CSAT report: ${stats.total} ratings, average ${stats.average.toFixed(2)}`, blocks };
 }
 
 module.exports = { ratingMessage, streakMessage, breakMessage, restoredMessage, weeklyMessage, escape };

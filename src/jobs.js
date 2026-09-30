@@ -21,7 +21,15 @@ function createJobs({ db, intercom, slack, clock, ratings, queue, log = console 
   }
 
   // friday: local date of the report. Covers Friday 14:00 a week ago to 14:00 on that day.
-  async function weekly(friday = clock.localDate(nowSeconds())) {
+  // Default: the latest report time that has passed (Friday 14:00).
+  function lastReportFriday(now = nowSeconds()) {
+    const p = clock.parts(now);
+    let friday = addDays(p.date, -((p.weekday - 5 + 7) % 7));
+    if (now < clock.epochAt(friday, 14, 0)) friday = addDays(friday, -7);
+    return friday;
+  }
+
+  async function weekly(friday = lastReportFriday()) {
     const start = clock.epochAt(addDays(friday, -7), 14, 0);
     const end = clock.epochAt(friday, 14, 0);
     const stats = weeklyStats(weekRows.all(start, end));
@@ -76,7 +84,7 @@ function createJobs({ db, intercom, slack, clock, ratings, queue, log = console 
     return saved;
   }
 
-  return { morning, weekly, reconcile, backfill };
+  return { morning, weekly, reconcile, backfill, lastReportFriday };
 }
 
 module.exports = { createJobs };

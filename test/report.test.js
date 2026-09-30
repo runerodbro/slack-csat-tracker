@@ -27,3 +27,21 @@ test("empty week", () => {
   const msg = weeklyMessage({ stats: weeklyStats([]), from: "a", to: "b" });
   assert.match(msg.text, /no ratings/);
 });
+
+test("weekly report uses plain blocks, so Slack does not collapse it", () => {
+  const msg = weeklyMessage({ stats: weeklyStats([{ score: 5, admin_id: "1", admin_name: "Ann" }]), from: "a", to: "b" });
+  assert.equal(msg.attachments, undefined);
+  assert.ok(msg.blocks.length > 3);
+});
+
+test("last report Friday", () => {
+  const { makeClock } = require("../src/time");
+  const { createJobs } = require("../src/jobs");
+  const clock = makeClock("Europe/Copenhagen");
+  const db = { prepare: () => ({}) };
+  const jobs = createJobs({ db, clock });
+  assert.equal(jobs.lastReportFriday(clock.epochAt("2026-09-30", 13, 26)), "2026-09-25"); // Wednesday
+  assert.equal(jobs.lastReportFriday(clock.epochAt("2026-10-02", 13, 59)), "2026-09-25"); // Friday before 14:00
+  assert.equal(jobs.lastReportFriday(clock.epochAt("2026-10-02", 14, 0)), "2026-10-02"); // Friday 14:00
+  assert.equal(jobs.lastReportFriday(clock.epochAt("2026-10-04", 9, 0)), "2026-10-02"); // Sunday
+});
