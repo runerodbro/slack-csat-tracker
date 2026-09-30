@@ -16,9 +16,9 @@ test("rating message: fields, escaping, red bar for negative", () => {
   assert.match(json, /https:\/\/x\/1/);
 });
 
-test("rating message: dark blue for positive, no Slack user falls back to name", () => {
+test("rating message: red bar for positive too, no Slack user falls back to name", () => {
   const msg = ratingMessage({ rating: { ...rating, score: 5, remark: null }, url: "u" });
-  assert.equal(msg.attachments[0].color, "#091722");
+  assert.equal(msg.attachments[0].color, "#EE2737");
   assert.match(JSON.stringify(msg), /\*Assignee\*\\nAnn/);
   assert.match(JSON.stringify(msg), /No comment/);
 });
