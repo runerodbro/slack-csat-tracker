@@ -5,13 +5,10 @@
   "description": "Posts Intercom CSAT ratings, streaks and weekly reports to Slack",
   "main": "index.js",
   "engines": {
-    "node": ">=22"
+    "node": ">=22.13"
   },
   "scripts": {
     "start": "node index.js",
     "db:init": "node src/db.js"
-  },
-  "dependencies": {
-    "better-sqlite3": "^13.0.3"
   }
 }
