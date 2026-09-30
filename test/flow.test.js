@@ -31,6 +31,7 @@ function setup() {
     if (u.pathname === "/users.lookupByEmail") return json({ ok: true, user: { id: "UANN" } });
     if (u.pathname === "/chat.postMessage") return json({ ok: true, ts: String(state.nextTs++) });
     if (u.pathname === "/chat.update") return json({ ok: true });
+    if (u.pathname === "/reactions.add") return json({ ok: true });
     throw new Error(`Unexpected fetch ${url}`);
   };
   const log = { info() {}, warn() {}, error() {} };
@@ -123,4 +124,27 @@ test("history rating that changes is posted, and a failed post is retried", asyn
 
   assert.equal(await app.ratings.processConversation("42"), "posted");
   assert.match(slackCalls().at(-1).body.text, /Streak has been broken/);
+});
+
+test("morning: record celebration once, with reactions; a test run does not use it up", async () => {
+  const { app, state } = setup();
+  // History: a negative rating on 2026-03-01, positive ones after it.
+  state.rating = rating(2, Date.parse("2026-03-01T10:00:00Z") / 1000);
+  await app.ratings.processConversation("42", { post: false });
+  state.rating = { ...rating(5, Date.parse("2026-05-01T10:00:00Z") / 1000), teammate: { id: 7 } };
+  await app.ratings.processConversation("43", { post: false, conversation: { id: "43", conversation_rating: state.rating } });
+
+  const posts = () => state.calls.filter((c) => c.path === "/chat.postMessage");
+  const reactions = () => state.calls.filter((c) => c.path === "/reactions.add");
+
+  let r = await app.jobs.morning("2026-10-05", { remember: false });
+  assert.equal(r.celebration, "🏆 NEW RECORD! 🏆");
+  r = await app.jobs.morning("2026-10-05");
+  assert.equal(r.celebration, "🏆 NEW RECORD! 🏆", "test run did not use it up");
+  assert.match(JSON.stringify(posts().at(-1).body), /<@UANN> \(1\)/);
+  assert.equal(reactions().length, 4);
+
+  r = await app.jobs.morning("2026-10-06");
+  assert.equal(r.celebration, null, "no second celebration");
+  assert.equal(posts().at(-1).body.attachments[0].color, "#D4A017");
 });

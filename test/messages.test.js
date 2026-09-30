@@ -26,7 +26,7 @@ test("rating message: green bar for positive, no Slack user falls back to name",
 test("streak message marks a new record", () => {
   const msg = streakMessage({ current: 12, since: "2026-09-18", record: { length: 9, from: "2026-08-01", to: "2026-08-10" }, isNewRecord: true });
   assert.match(msg.text, /NEW RECORD/);
-  assert.equal(msg.attachments[0].color, "#EE2737");
+  assert.equal(msg.attachments[0].color, "#D4A017");
   const normal = streakMessage({ current: 5, since: "2026-09-25", record: { length: 9, from: "2026-08-01", to: "2026-08-10" }, isNewRecord: false });
   assert.equal(normal.attachments[0].color, "#1F9D63");
 });

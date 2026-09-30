@@ -35,7 +35,20 @@ function createSlack({ token, channel, apiUrl, log = console }) {
     return null;
   }
 
+  // Adds an emoji reaction. Needs the reactions:write scope; fails quietly without it.
+  let reactDisabled = false;
+  async function react(ts, name) {
+    if (reactDisabled) return;
+    try {
+      await call("reactions.add", { channel, timestamp: ts, name });
+    } catch (err) {
+      if (err.message.includes("missing_scope")) reactDisabled = true;
+      if (!err.message.includes("already_reacted")) log.warn(err.message);
+    }
+  }
+
   return {
+    react,
     post: async (message) => (await call("chat.postMessage", { channel, unfurl_links: false, ...message })).ts,
     update: (ts, message) => call("chat.update", { channel, ts, ...message }),
     userIdByEmail,

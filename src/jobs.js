@@ -1,6 +1,7 @@
 // Scheduled jobs: morning streak post, weekly report, reconciliation.
 
 const { nowSeconds, addDays } = require("./time");
+const { celebrationFor } = require("./celebrate");
 const { weeklyStats } = require("./report");
 const messages = require("./messages");
 
@@ -14,10 +15,45 @@ function createJobs({ db, intercom, slack, clock, ratings, queue, log = console 
   );
   const getRating = db.prepare("SELECT score, remark FROM ratings WHERE conversation_id = ?");
 
-  async function morning(today = clock.localDate(nowSeconds())) {
+  const celebratedKeys = db.prepare("SELECT run_key FROM scheduled_runs WHERE job = 'celebration'");
+  const markCelebrated = db.prepare("INSERT OR IGNORE INTO scheduled_runs (job, run_key) VALUES ('celebration', ?)");
+  const streakRows = db.prepare(
+    "SELECT score, admin_id, admin_name, admin_email FROM ratings WHERE rated_at >= ?",
+  );
+
+  async function streakStats(since) {
+    const rows = streakRows.all(clock.epochAt(addDays(since, 1), 0, 0));
+    const agents = new Map();
+    for (const r of rows) {
+      const key = r.admin_id || "unassigned";
+      const a = agents.get(key) || { name: r.admin_name || "Unassigned", email: r.admin_email, count: 0 };
+      a.count++;
+      agents.set(key, a);
+    }
+    const top = [...agents.values()].sort((a, b) => b.count - a.count || a.name.localeCompare(b.name)).slice(0, 5);
+    for (const a of top) a.slackId = await slack.userIdByEmail(a.email);
+    return {
+      count: rows.length,
+      fiveStar: rows.filter((r) => r.score === 5).length,
+      average: rows.length ? rows.reduce((sum, r) => sum + r.score, 0) / rows.length : 0,
+      agents: top,
+    };
+  }
+
+  // remember: false for test runs, so the real post still celebrates.
+  async function morning(today = clock.localDate(nowSeconds()), { remember = true } = {}) {
     const streak = ratings.currentStreak(today);
-    await slack.post(messages.streakMessage(streak));
-    return streak;
+    const celebrated = new Set(celebratedKeys.all().map((r) => r.run_key));
+    const due = celebrationFor({ streak, celebrated });
+    const celebration = due ? { title: due.title, ...(await streakStats(streak.since)) } : null;
+
+    const ts = await slack.post(messages.streakMessage(streak, celebration));
+    if (due) {
+      await slack.react(ts, "tada");
+      await slack.react(ts, "trophy");
+      if (remember) for (const key of due.keys) markCelebrated.run(key);
+    }
+    return { ...streak, celebration: due?.title || null };
   }
 
   // friday: local date of the report. Covers Friday 14:00 a week ago to 14:00 on that day.

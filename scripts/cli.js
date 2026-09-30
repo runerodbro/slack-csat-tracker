@@ -30,7 +30,8 @@ async function main() {
       console.log({ startDate: app.ratings.streakStartDate(), ...app.ratings.currentStreak() });
       break;
     case "morning":
-      console.log(await app.jobs.morning());
+      // A test run does not use up the celebration for the real morning post.
+      console.log(await app.jobs.morning(undefined, { remember: false }));
       break;
     case "weekly":
       console.log(await app.jobs.weekly(arg));

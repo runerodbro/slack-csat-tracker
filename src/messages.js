@@ -3,9 +3,10 @@
 // The colored side bar comes from a legacy attachment with blocks inside it.
 // The color shows the situation:
 // Imperial Red (iPaper palette) for what needs attention: negative rating,
-// broken streak, new record. Green for a positive rating or a normal streak
-// post; it is outside the palette by choice and has at least 3:1 contrast on
-// both Slack's light and dark theme. Gray 3 for a restored break.
+// broken streak. Green for a positive rating or a normal streak post. Gold for
+// a new record. Green and gold are outside the palette by choice. Green has at
+// least 3:1 contrast on Slack's light and dark theme; gold is fainter on light.
+// Gray 3 for a restored break.
 
 const { formatDate, addDays } = require("./time");
 const { isNegative } = require("./streak");
@@ -13,6 +14,7 @@ const { isNegative } = require("./streak");
 const IMPERIAL_RED = "#EE2737";
 const GRAY = "#B6BBBF";
 const GREEN = "#1F9D63";
+const GOLD = "#D4A017";
 
 const alert = (yes) => (yes ? IMPERIAL_RED : GREEN);
 
@@ -96,20 +98,52 @@ function recordText(record) {
 }
 
 // streak: result of computeStreak().
-function streakMessage(streak) {
+// celebration (optional): { title, count, fiveStar, average, agents: [{ name, slackId, count }] }
+function streakMessage(streak, celebration = null) {
   const headline = streak.isNewRecord
     ? `🏆 *NEW RECORD!* ${days(streak.current)} without a negative rating`
     : `🔥 *CSAT streak: ${days(streak.current)}* without a negative rating`;
-  const fields = [field("Current streak", days(streak.current)), field("Record", recordText(streak.record))];
+  const fields = [field("Current streak", days(streak.current))];
+  if (streak.isNewRecord) {
+    fields.push(field("Old record", recordText(streak.record)));
+    fields.push(field("Past the old record", `+${days(streak.current - streak.record.length)}`));
+  } else {
+    fields.push(field("Record", recordText(streak.record)));
+  }
   if (streak.since) fields.push(field("Last negative rating", formatDate(streak.since)));
-  return wrap(
-    streak.isNewRecord ? `NEW RECORD: CSAT streak ${days(streak.current)}` : `CSAT streak: ${days(streak.current)}`,
-    alert(streak.isNewRecord),
-    [
-      { type: "section", text: { type: "mrkdwn", text: headline } },
-      { type: "section", fields },
-    ],
-  );
+
+  const blocks = [];
+  if (celebration) blocks.push({ type: "header", text: { type: "plain_text", text: celebration.title, emoji: true } });
+  blocks.push({ type: "section", text: { type: "mrkdwn", text: headline } }, { type: "section", fields });
+
+  if (celebration) {
+    blocks.push({ type: "divider" });
+    if (celebration.count) {
+      blocks.push({
+        type: "section",
+        text: {
+          type: "mrkdwn",
+          text:
+            `*During this streak* 📈\n${celebration.count} ${celebration.count === 1 ? "rating" : "ratings"}` +
+            ` · ${celebration.fiveStar} × 🤩 5/5 · average ${celebration.average.toFixed(2)}`,
+        },
+      });
+    }
+    if (celebration.agents.length) {
+      const names = celebration.agents
+        .map((a) => `${a.slackId ? `<@${a.slackId}>` : escape(a.name)} (${a.count})`)
+        .join(", ");
+      blocks.push({ type: "section", text: { type: "mrkdwn", text: `*Thank you* 🙌\n${names}` } });
+    }
+    blocks.push({ type: "context", elements: [{ type: "mrkdwn", text: "🎊 Keep it going, team! 🎊" }] });
+  }
+
+  const text = celebration
+    ? `${celebration.title} CSAT streak ${days(streak.current)}`
+    : streak.isNewRecord
+      ? `NEW RECORD: CSAT streak ${days(streak.current)}`
+      : `CSAT streak: ${days(streak.current)}`;
+  return wrap(text, streak.isNewRecord ? GOLD : GREEN, blocks);
 }
 
 function recordVerdict({ length, previousRecordDays, isRecord }) {

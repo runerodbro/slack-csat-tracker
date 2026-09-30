@@ -13,7 +13,10 @@ ratings, and sends a weekly report.
   negative rating (1–3). Days with no ratings count. A negative rating on
   Tuesday gives a streak of 1 on Wednesday morning.
   - Morning post: Monday to Friday at 08:30 Copenhagen time, with the record
-    and **NEW RECORD** when the current streak beats it.
+    and **NEW RECORD** (gold) when the current streak beats it.
+  - Big celebration on the first record post of a streak and on milestones
+    (every 50 days, every full year): header, streak statistics, thanks with
+    @mentions of the top 5 agents in the streak, and 🎉🏆 reactions.
   - A negative rating posts "Streak has been broken 😭" at once (after the
     5-minute delay), with the length and whether it beat the record. Only the
     first negative rating of a day posts this.
@@ -40,7 +43,8 @@ Intercom: subscribe the app's webhook to `conversation.rating.added` with the
 URL `https://<host>/csat/webhooks/intercom`.
 
 Slack: the bot needs `chat:write`. Add `users:read` and `users:read.email` to
-@mention the assignee. Invite the bot to the channel.
+@mention agents, and `reactions:write` for the celebration reactions. Invite
+the bot to the channel.
 
 Server files: `deploy/csat.service` (systemd) and `deploy/nginx-csat.conf`.
 
