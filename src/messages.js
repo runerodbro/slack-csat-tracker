@@ -1,18 +1,20 @@
 // Slack Block Kit messages. Pure functions: data in, message payload out.
 //
 // The colored side bar comes from a legacy attachment with blocks inside it.
-// The color shows the situation, with colors from the iPaper palette:
-// Imperial Red for what needs attention (negative rating, broken streak,
-// new record), Gray 3 for everything else. Gray 3 shows in both Slack's light
-// and dark theme; Dark Blue was nearly invisible in the dark theme.
+// The color shows the situation:
+// Imperial Red (iPaper palette) for what needs attention: negative rating,
+// broken streak, new record. Green for a positive rating or a normal streak
+// post; it is outside the palette by choice and has at least 3:1 contrast on
+// both Slack's light and dark theme. Gray 3 for a restored break.
 
 const { formatDate, addDays } = require("./time");
 const { isNegative } = require("./streak");
 
 const IMPERIAL_RED = "#EE2737";
 const GRAY = "#B6BBBF";
+const GREEN = "#1F9D63";
 
-const alert = (yes) => (yes ? IMPERIAL_RED : GRAY);
+const alert = (yes) => (yes ? IMPERIAL_RED : GREEN);
 
 const SCORES = {
   1: { emoji: "😠", label: "Terrible" },
