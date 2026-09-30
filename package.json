@@ -8,7 +8,8 @@
     "node": ">=22.13"
   },
   "scripts": {
-    "start": "node index.js",
-    "db:init": "node src/db.js"
+    "start": "node --env-file=.env --disable-warning=ExperimentalWarning index.js",
+    "test": "node --disable-warning=ExperimentalWarning --test \"test/*.test.js\"",
+    "db:init": "node --disable-warning=ExperimentalWarning src/db.js"
   }
 }

@@ -69,6 +69,13 @@ const MIGRATIONS = [
     PRIMARY KEY (job, run_key)
   );
   `,
+  `
+  -- Break posts can be updated later, so keep the message and what it said.
+  ALTER TABLE streak_breaks ADD COLUMN slack_ts TEXT;
+  ALTER TABLE streak_breaks ADD COLUMN previous_record_days INTEGER;
+  ALTER TABLE streak_breaks ADD COLUMN restored_at INTEGER;
+  CREATE UNIQUE INDEX streak_breaks_conversation ON streak_breaks (conversation_id);
+  `,
 ];
 
 function schemaVersion(db) {
