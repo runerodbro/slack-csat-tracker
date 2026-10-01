@@ -177,3 +177,7 @@ npm test
 ```
 
 Tests use fake Intercom and Slack APIs and an in-memory database.
+
+GitHub Actions runs `npm test` on Node 24 for every pull request and every push
+to `main` (`.github/workflows/test.yml`). To block merging when tests fail, add
+the `test` check as a required status check in the ruleset for `main`.
