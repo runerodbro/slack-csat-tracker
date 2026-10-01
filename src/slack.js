@@ -1,6 +1,10 @@
-// Slack Web API client: post and update messages, find users by email.
+// Slack Web API client: post and update messages, find users, check request signatures.
 
-function createSlack({ token, channel, apiUrl, log = console }) {
+const crypto = require("crypto");
+
+// getChannel: returns the current posting channel. Posts return { ts, channel },
+// and updates and reactions take the channel the message was posted in.
+function createSlack({ token, getChannel, apiUrl, log = console }) {
   async function call(method, body) {
     const res = await fetch(`${apiUrl}/${method}`, {
       method: "POST",
@@ -37,7 +41,7 @@ function createSlack({ token, channel, apiUrl, log = console }) {
 
   // Adds an emoji reaction. Needs the reactions:write scope; fails quietly without it.
   let reactDisabled = false;
-  async function react(ts, name) {
+  async function react(ts, name, channel) {
     if (reactDisabled) return;
     try {
       await call("reactions.add", { channel, timestamp: ts, name });
@@ -47,12 +51,36 @@ function createSlack({ token, channel, apiUrl, log = console }) {
     }
   }
 
+  async function userInfo(userId) {
+    const res = await fetch(`${apiUrl}/users.info?user=${encodeURIComponent(userId)}`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    const data = await res.json().catch(() => ({ ok: false, error: `http_${res.status}` }));
+    if (!data.ok) throw new Error(`Slack users.info: ${data.error}`);
+    return data.user;
+  }
+
+  async function post(message, channel = getChannel()) {
+    const data = await call("chat.postMessage", { channel, unfurl_links: false, ...message });
+    return { ts: data.ts, channel: data.channel || channel };
+  }
+
   return {
     react,
-    post: async (message) => (await call("chat.postMessage", { channel, unfurl_links: false, ...message })).ts,
-    update: (ts, message) => call("chat.update", { channel, ts, ...message }),
+    post,
+    update: (ts, message, channel) => call("chat.update", { channel: channel || getChannel(), ts, ...message }),
     userIdByEmail,
+    userInfo,
   };
 }
 
-module.exports = { createSlack };
+// Slack signs requests with HMAC-SHA256 over "v0:<timestamp>:<body>".
+// Requests older than 5 minutes are rejected to stop replays.
+function verifySlackSignature({ secret, rawBody, timestamp, signature, now = Date.now() / 1000 }) {
+  if (!secret || !timestamp || !signature) return false;
+  if (Math.abs(now - Number(timestamp)) > 300) return false;
+  const expected = "v0=" + crypto.createHmac("sha256", secret).update(`v0:${timestamp}:${rawBody}`).digest("hex");
+  return signature.length === expected.length && crypto.timingSafeEqual(Buffer.from(signature), Buffer.from(expected));
+}
+
+module.exports = { createSlack, verifySlackSignature };

@@ -14,6 +14,7 @@ function setup() {
     INTERCOM_ACCESS_TOKEN: "t", INTERCOM_CLIENT_SECRET: "secret", SLACK_BOT_TOKEN: "x", SLACK_CHANNEL_ID: "C1",
     INTERCOM_API_URL: "https://intercom.test", SLACK_API_URL: "https://slack.test",
     INTERCOM_WORKSPACE_ID: "ws1", STREAK_START_DATE: "2026-01-01", POST_DELAY_SECONDS: "300",
+    SLACK_SIGNING_SECRET: "slacksecret", SLACK_ADMIN_USER_IDS: "UFRIEND",
   });
   const state = { rating: null, calls: [], nextTs: 1 };
   global.fetch = async (url, init = {}) => {
@@ -29,7 +30,11 @@ function setup() {
       }
     }
     if (u.pathname === "/users.lookupByEmail") return json({ ok: true, user: { id: "UANN" } });
-    if (u.pathname === "/chat.postMessage") return json({ ok: true, ts: String(state.nextTs++) });
+    if (u.pathname === "/users.info") return json({ ok: true, user: { id: u.searchParams.get("user"), is_admin: u.searchParams.get("user") === "UADMIN" } });
+    if (u.pathname === "/chat.postMessage") {
+      if (body.channel === "CNOBOT") return json({ ok: false, error: "not_in_channel" });
+      return json({ ok: true, ts: String(state.nextTs++), channel: body.channel });
+    }
     if (u.pathname === "/chat.update") return json({ ok: true });
     if (u.pathname === "/reactions.add") return json({ ok: true });
     throw new Error(`Unexpected fetch ${url}`);
@@ -147,4 +152,74 @@ test("morning: record celebration once, with reactions; a test run does not use 
   r = await app.jobs.morning("2026-10-06");
   assert.equal(r.celebration, null, "no second celebration");
   assert.equal(posts().at(-1).body.attachments[0].color, "#D4A017");
+});
+
+test("/csat here: only admins, needs the bot in the channel, then all posts go there", async () => {
+  const { app, state } = setup();
+  const posts = () => state.calls.filter((c) => c.path === "/chat.postMessage");
+  state.rating = rating(5);
+  await app.ratings.processConversation("42"); // posted in C1
+
+  let r = await app.commands.handle({ text: "here", user_id: "UNOBODY", channel_id: "C2" });
+  assert.match(r.text, /Only Slack workspace admins/);
+  r = await app.commands.handle({ text: "here", user_id: "UADMIN", channel_id: "CNOBOT" });
+  assert.match(r.text, /Invite me first/);
+  assert.equal(app.getChannel(), "C1");
+
+  r = await app.commands.handle({ text: "here", user_id: "UADMIN", channel_id: "C2" });
+  assert.match(r.text, /Done/);
+  assert.equal(posts().at(-1).body.channel, "C2");
+  assert.match(posts().at(-1).body.text, /Changed by <@UADMIN>/);
+  assert.equal(app.getChannel(), "C2");
+
+  // A person in SLACK_ADMIN_USER_IDS may change it too.
+  r = await app.commands.handle({ text: "here", user_id: "UFRIEND", channel_id: "C3" });
+  assert.match(r.text, /Done/);
+
+  // The old message is updated in its own channel; new posts go to the new one.
+  state.rating = rating(2);
+  await app.ratings.processConversation("42");
+  const update = state.calls.filter((c) => c.path === "/chat.update").at(-1);
+  assert.equal(update.body.channel, "C1");
+  assert.equal(posts().at(-1).body.channel, "C3");
+  assert.match(posts().at(-1).body.text, /Streak has been broken/);
+
+  r = await app.commands.handle({ text: "status", user_id: "UNOBODY" });
+  assert.match(r.text, /<#C3>, set by <@UFRIEND>/);
+  r = await app.commands.handle({ text: "preview" });
+  assert.equal(r.response_type, "ephemeral");
+  assert.ok(r.attachments);
+  assert.match((await app.commands.handle({ text: "" })).text, /CSAT commands/);
+});
+
+test("Slack command route: signature checked, JSON reply", async () => {
+  const { app, config, log } = setup();
+  const server = createServer({ intercom: app.intercom, queue: app.queue, commands: app.commands, config, log });
+  await new Promise((r) => server.listen(0, "127.0.0.1", r));
+  const url = `http://127.0.0.1:${server.address().port}/slack/commands`;
+  const body = "command=%2Fcsat&text=help&user_id=U1&channel_id=C1";
+  const ts = String(Math.floor(Date.now() / 1000));
+  const sig = "v0=" + crypto.createHmac("sha256", "slacksecret").update(`v0:${ts}:${body}`).digest("hex");
+  const headers = { "content-type": "application/x-www-form-urlencoded", "x-slack-request-timestamp": ts };
+
+  const bad = await realFetch(url, { method: "POST", body, headers: { ...headers, "x-slack-signature": "v0=00" } });
+  assert.equal(bad.status, 401);
+  const old = String(Number(ts) - 600);
+  const oldSig = "v0=" + crypto.createHmac("sha256", "slacksecret").update(`v0:${old}:${body}`).digest("hex");
+  const replay = await realFetch(url, { method: "POST", body, headers: { ...headers, "x-slack-request-timestamp": old, "x-slack-signature": oldSig } });
+  assert.equal(replay.status, 401);
+  const good = await realFetch(url, { method: "POST", body, headers: { ...headers, "x-slack-signature": sig } });
+  assert.equal(good.status, 200);
+  assert.match((await good.json()).text, /CSAT commands/);
+  server.close();
+});
+
+test("CLI channel override wins over the Slack setting", async () => {
+  const { config } = setup();
+  const db = open(":memory:");
+  const app = createApp(config, { db, log: { info() {}, warn() {}, error() {} }, channelOverride: "CTEST" });
+  app.settings.set("slack_channel", "C9", "U1");
+  assert.equal(app.getChannel(), "CTEST");
+  const app2 = createApp(config, { db, log: { info() {}, warn() {}, error() {} } });
+  assert.equal(app2.getChannel(), "C9");
 });

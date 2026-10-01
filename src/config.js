@@ -28,7 +28,11 @@ function loadConfig(env = process.env) {
     },
     slack: {
       token: env.SLACK_BOT_TOKEN,
+      // Default posting channel. `/csat here` in Slack overrides it.
       channel: env.SLACK_CHANNEL_ID,
+      signingSecret: env.SLACK_SIGNING_SECRET || null,
+      // People who may change settings with /csat, besides workspace admins and owners.
+      adminUserIds: (env.SLACK_ADMIN_USER_IDS || "").split(",").map((s) => s.trim()).filter(Boolean),
       apiUrl: (env.SLACK_API_URL || "https://slack.com/api").replace(/\/$/, ""),
     },
   };

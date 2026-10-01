@@ -76,6 +76,18 @@ const MIGRATIONS = [
   ALTER TABLE streak_breaks ADD COLUMN restored_at INTEGER;
   CREATE UNIQUE INDEX streak_breaks_conversation ON streak_breaks (conversation_id);
   `,
+  `
+  -- Settings changed from Slack, for example the posting channel.
+  CREATE TABLE settings (
+    key        TEXT PRIMARY KEY,
+    value      TEXT NOT NULL,
+    updated_by TEXT,
+    updated_at INTEGER NOT NULL DEFAULT (unixepoch())
+  );
+  -- The channel a message was posted in, so updates reach it after a channel change.
+  ALTER TABLE ratings ADD COLUMN slack_channel TEXT;
+  ALTER TABLE streak_breaks ADD COLUMN slack_channel TEXT;
+  `,
 ];
 
 function schemaVersion(db) {

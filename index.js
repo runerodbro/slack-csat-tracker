@@ -8,11 +8,12 @@ const { createScheduler } = require("./src/scheduler");
 
 const config = loadConfig();
 const app = createApp(config);
-const server = createServer({ intercom: app.intercom, queue: app.queue, config });
+const server = createServer({ intercom: app.intercom, queue: app.queue, commands: app.commands, config });
 const scheduler = createScheduler({ db: app.db, clock: app.clock, jobs: app.jobs, queue: app.queue });
 
 server.listen(config.port, config.host, () => {
-  console.log(`Listening on ${config.host}:${config.port} (time zone ${config.timezone})`);
+  console.log(`Listening on ${config.host}:${config.port} (time zone ${config.timezone}, posting to ${app.getChannel()})`);
+  if (!config.slack.signingSecret) console.log("SLACK_SIGNING_SECRET not set: the /csat command is off");
   scheduler.start();
 });
 

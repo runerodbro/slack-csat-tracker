@@ -21,18 +21,18 @@ function createRatings({ db, intercom, slack, clock, config, log = console }) {
              admin_email = :admin_email, contact_id = :contact_id, contact_name = :contact_name,
              contact_email = :contact_email, rated_at = :rated_at, source = :source, updated_at = unixepoch()
       WHERE conversation_id = :conversation_id`),
-    posted: db.prepare("UPDATE ratings SET slack_ts = ?, posted_at = ? WHERE conversation_id = ?"),
+    posted: db.prepare("UPDATE ratings SET slack_ts = ?, slack_channel = ?, posted_at = ? WHERE conversation_id = ?"),
     negatives: db.prepare("SELECT rated_at FROM ratings WHERE score <= 3 AND conversation_id IS NOT ?"),
     firstRating: db.prepare("SELECT MIN(rated_at) AS first FROM ratings"),
     getBreak: db.prepare("SELECT * FROM streak_breaks WHERE conversation_id = ?"),
     saveBreak: db.prepare(`
       INSERT INTO streak_breaks (conversation_id, broken_at, length_days, was_record, previous_record_days,
-                                 posted_at, slack_ts, restored_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, NULL)
+                                 posted_at, slack_ts, slack_channel, restored_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL)
       ON CONFLICT (conversation_id) DO UPDATE SET
         broken_at = excluded.broken_at, length_days = excluded.length_days, was_record = excluded.was_record,
         previous_record_days = excluded.previous_record_days, posted_at = excluded.posted_at,
-        slack_ts = excluded.slack_ts, restored_at = NULL`),
+        slack_ts = excluded.slack_ts, slack_channel = excluded.slack_channel, restored_at = NULL`),
     restoreBreak: db.prepare("UPDATE streak_breaks SET restored_at = ? WHERE conversation_id = ?"),
   };
 
@@ -79,7 +79,7 @@ function createRatings({ db, intercom, slack, clock, config, log = console }) {
         previousRecordDays: info.previousRecord ? info.previousRecord.length : null,
         isRecord: info.isRecord,
       };
-      const ts = await slack.post(messages.breakMessage({ info: details, rating: row, url }));
+      const posted = await slack.post(messages.breakMessage({ info: details, rating: row, url }));
       q.saveBreak.run(
         row.conversation_id,
         row.rated_at,
@@ -87,13 +87,18 @@ function createRatings({ db, intercom, slack, clock, config, log = console }) {
         details.isRecord ? 1 : 0,
         details.previousRecordDays,
         nowSeconds(),
-        ts,
+        posted.ts,
+        posted.channel,
       );
     } else if (!isNegative(row.score) && active) {
       const stillBroken = negativeDates(row.conversation_id).includes(clock.localDate(brk.broken_at));
       const info = { length: brk.length_days };
       if (brk.slack_ts) {
-        await slack.update(brk.slack_ts, messages.restoredMessage({ info, rating: row, url, stillBroken }));
+        await slack.update(
+          brk.slack_ts,
+          messages.restoredMessage({ info, rating: row, url, stillBroken }),
+          brk.slack_channel,
+        );
       }
       q.restoreBreak.run(nowSeconds(), row.conversation_id);
     }
@@ -156,10 +161,10 @@ function createRatings({ db, intercom, slack, clock, config, log = console }) {
       const change = existing && changed ? { from: existing.score } : null;
       const message = messages.ratingMessage({ rating: row, url, assigneeSlackId, change });
       if (needsPost) {
-        const ts = await slack.post(message);
-        q.posted.run(ts, nowSeconds(), id);
+        const posted = await slack.post(message);
+        q.posted.run(posted.ts, posted.channel, nowSeconds(), id);
       } else {
-        await slack.update(existing.slack_ts, message);
+        await slack.update(existing.slack_ts, message, existing.slack_channel);
       }
     }
     await syncBreak(row, url);

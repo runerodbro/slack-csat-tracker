@@ -47,10 +47,10 @@ function createJobs({ db, intercom, slack, clock, ratings, queue, log = console 
     const due = celebrationFor({ streak, celebrated });
     const celebration = due ? { title: due.title, ...(await streakStats(streak.since)) } : null;
 
-    const ts = await slack.post(messages.streakMessage(streak, celebration));
+    const posted = await slack.post(messages.streakMessage(streak, celebration));
     if (due) {
-      await slack.react(ts, "tada");
-      await slack.react(ts, "trophy");
+      await slack.react(posted.ts, "tada", posted.channel);
+      await slack.react(posted.ts, "trophy", posted.channel);
       if (remember) for (const key of due.keys) markCelebrated.run(key);
     }
     return { ...streak, celebration: due?.title || null };

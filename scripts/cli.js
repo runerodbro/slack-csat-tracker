@@ -6,14 +6,33 @@
 //   node --env-file=.env scripts/cli.js reconcile      look for missed ratings
 //   node --env-file=.env scripts/cli.js post <conversation-id>   process one conversation now
 //
-// To test in another channel: SLACK_CHANNEL_ID=C0123 node --env-file=.env scripts/cli.js morning
+// To post in a test channel: add --channel=C0123, for example
+//   node --env-file=.env scripts/cli.js morning --channel=C0123
+// SLACK_CHANNEL_ID=C0123 in front of the command still works too.
 
+const fs = require("fs");
+const util = require("util");
 const { loadConfig } = require("../src/config");
 const { createApp } = require("../src/app");
 
+// A channel given for this run only. Without it, posts go to the channel set
+// with /csat here, or to SLACK_CHANNEL_ID in .env.
+function channelOverride(argv) {
+  const flag = argv.find((a) => a.startsWith("--channel="));
+  if (flag) return flag.slice("--channel=".length);
+  // SLACK_CHANNEL_ID=... in front of the command: differs from the value in .env.
+  try {
+    const fromFile = util.parseEnv(fs.readFileSync(".env", "utf8")).SLACK_CHANNEL_ID;
+    if (process.env.SLACK_CHANNEL_ID && process.env.SLACK_CHANNEL_ID !== fromFile) return process.env.SLACK_CHANNEL_ID;
+  } catch {}
+  return null;
+}
+
 async function main() {
-  const [command, arg] = process.argv.slice(2);
-  const app = createApp(loadConfig());
+  const argv = process.argv.slice(2);
+  const [command, arg] = argv.filter((a) => !a.startsWith("--"));
+  const app = createApp(loadConfig(), { channelOverride: channelOverride(argv) });
+  if (["morning", "weekly", "post", "reconcile"].includes(command)) console.log(`Posting to channel ${app.getChannel()}`);
   switch (command) {
     case "backfill": {
       const days = Number(arg || 365);

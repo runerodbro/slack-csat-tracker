@@ -33,6 +33,18 @@ positive ratings, celebrates records, and sends a weekly report.
   top 5 agents by number of ratings with average and % positive.
 - **Reconciliation.** Every hour the app asks Intercom for ratings from the
   last 3 days and processes any the webhook missed.
+- **`/csat` slash command in Slack.**
+
+  | Command | What it does |
+  |---|---|
+  | `/csat here` | Posts go to this channel from now on. Only workspace admins and owners, or people in `SLACK_ADMIN_USER_IDS`. The bot must be in the channel; it posts a visible confirmation there. |
+  | `/csat status` | Shows the posting channel, who set it, the streak and the schedule. |
+  | `/csat preview` | Shows the streak post, only to you. |
+  | `/csat help` | Lists the commands. |
+
+  Replies are only visible to the person who typed the command. After a
+  channel change, updates to older messages (a changed rating, a restored
+  break) still happen in the channel where those messages are.
 
 ### Side bar colors
 
@@ -69,14 +81,22 @@ windows if you do not want that.
   `conversation.rating.added` with the URL
   `https://middleware.ipaperdemo.io/csat/webhooks/intercom`.
 - **Slack:** an app with a bot token and these scopes: `chat:write`;
-  `users:read` and `users:read.email` for @mentions; `reactions:write` for the
-  celebration reactions. Invite the bot to the channel. Missing optional
-  scopes are skipped quietly.
+  `users:read` and `users:read.email` for @mentions and the admin check;
+  `reactions:write` for the celebration reactions; `commands` for `/csat`.
+  Invite the bot to the channel. Missing optional scopes are skipped quietly.
+  For `/csat`: under **Slash Commands**, create `/csat` with the Request URL
+  `https://middleware.ipaperdemo.io/csat/slack/commands`, and put the
+  **Signing Secret** (Basic Information → App Credentials) in `.env` as
+  `SLACK_SIGNING_SECRET`. Without it the command is off.
 
 ## Settings (`.env`)
 
 See `.env.example`. Required: `INTERCOM_ACCESS_TOKEN`, `INTERCOM_CLIENT_SECRET`,
-`SLACK_BOT_TOKEN`, `SLACK_CHANNEL_ID`, `DB_PATH`.
+`SLACK_BOT_TOKEN`, `SLACK_CHANNEL_ID`, `DB_PATH`. Optional for `/csat`:
+`SLACK_SIGNING_SECRET`, `SLACK_ADMIN_USER_IDS`.
+
+`SLACK_CHANNEL_ID` is the default channel. A channel set with `/csat here` is
+saved in the database and wins over it.
 
 `STREAK_START_DATE` sets the first day the streak and record count from. Use it
 to skip periods without real CSAT data. Without it, the app counts from the
@@ -150,7 +170,9 @@ sudo -u csat node --env-file=.env --disable-warning=ExperimentalWarning scripts/
 | `reconcile` | Looks for ratings the webhook missed. |
 | `post <conversation-id>` | Processes one conversation now. |
 
-To post in a test channel: `sudo -u csat env SLACK_CHANNEL_ID=C0123 node ...`
+To post in a test channel, add `--channel=C0123` to the command. It wins over
+the channel set with `/csat here`, for that one run only. The command prints
+the channel it posts to.
 
 Useful database queries:
 
@@ -168,6 +190,8 @@ sqlite3 -header -column /var/lib/csat/csat.db "SELECT date(rated_at, 'unixepoch'
 | `node: .env: not found` | The command ran outside `/opt/csat`. Run `cd /opt/csat` first. |
 | `Intercom ... 401 token_unauthorized` | The Intercom app misses a scope. Add it in the Developer Hub (see Requirements). |
 | `Slack ...: not_in_channel` | Invite the bot to the channel. |
+| `/csat` says "dispatch_failed" or "operation_timeout" | Slack can't reach the server. Check nginx and the Request URL. |
+| `/csat` does nothing and the log shows "bad signature" | `SLACK_SIGNING_SECRET` is wrong or missing. |
 | A streak or record that looks too long | A period without CSAT data. Set `STREAK_START_DATE` after it. |
 
 ## Development
