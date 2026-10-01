@@ -1,0 +1,25 @@
+# systemd service. Install:
+#   cp /opt/csat/deploy/csat.service /etc/systemd/system/csat.service
+#   systemctl daemon-reload && systemctl enable --now csat
+[Unit]
+Description=Slack CSAT tracker
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=csat
+Group=csat
+WorkingDirectory=/opt/csat
+ExecStart=/usr/bin/node --env-file=/opt/csat/.env --disable-warning=ExperimentalWarning index.js
+Restart=always
+RestartSec=5
+
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+ReadWritePaths=/var/lib/csat
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,15 @@
+{
+  "name": "slack-csat-tracker",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Posts Intercom CSAT ratings, streaks and weekly reports to Slack",
+  "main": "index.js",
+  "engines": {
+    "node": ">=22.13"
+  },
+  "scripts": {
+    "start": "node --env-file=.env --disable-warning=ExperimentalWarning index.js",
+    "test": "node --disable-warning=ExperimentalWarning --test \"test/*.test.js\"",
+    "db:init": "node --disable-warning=ExperimentalWarning src/db.js"
+  }
+}
