@@ -153,6 +153,8 @@ test("morning: record celebration once, with reactions; a test run does not use 
 
   r = await app.jobs.morning("2026-10-06");
   assert.equal(r.celebration, null, "no second celebration");
+  r = await app.jobs.morning("2026-10-06", { remember: false, forceCelebration: true });
+  assert.match(r.celebration, /NEW RECORD/, "preview can force it");
   assert.equal(posts().at(-1).body.attachments[0].color, "#D4A017");
 });
 

@@ -188,7 +188,7 @@ sudo -u csat node --env-file=.env --disable-warning=ExperimentalWarning scripts/
 |---|---|
 | `backfill [days]` | Imports ratings from the last N days (default 365) without Slack posts. Shows progress. Safe to run again. |
 | `streak` | Prints the streak and record. No post. |
-| `morning` | Posts the streak now. A test run does not use up a celebration. |
+| `morning` | Posts the streak now. A test run does not use up a celebration. Add `--celebrate` to preview the big celebration (only while the streak is a record). |
 | `weekly [YYYY-MM-DD]` | Posts the weekly report for the Friday given, default the last report Friday. |
 | `reconcile` | Looks for ratings the webhook missed. |
 | `post <conversation-id>` | Processes one conversation now. |

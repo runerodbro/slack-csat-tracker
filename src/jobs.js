@@ -41,9 +41,10 @@ function createJobs({ db, intercom, slack, clock, ratings, queue, log = console 
   }
 
   // remember: false for test runs, so the real post still celebrates.
-  async function morning(today = clock.localDate(nowSeconds()), { remember = true } = {}) {
+  // forceCelebration: show the celebration even if it was used (preview).
+  async function morning(today = clock.localDate(nowSeconds()), { remember = true, forceCelebration = false } = {}) {
     const streak = ratings.currentStreak(today);
-    const celebrated = new Set(celebratedKeys.all().map((r) => r.run_key));
+    const celebrated = forceCelebration ? new Set() : new Set(celebratedKeys.all().map((r) => r.run_key));
     const due = celebrationFor({ streak, celebrated });
     const celebration = due ? { title: due.title, ...(await streakStats(streak.since)) } : null;
 

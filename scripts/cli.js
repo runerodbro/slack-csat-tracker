@@ -9,6 +9,7 @@
 // To post in a test channel: add --channel=C0123, for example
 //   node --env-file=.env scripts/cli.js morning --channel=C0123
 // SLACK_CHANNEL_ID=C0123 in front of the command still works too.
+// morning --celebrate previews the big celebration post.
 
 const fs = require("fs");
 const util = require("util");
@@ -50,7 +51,8 @@ async function main() {
       break;
     case "morning":
       // A test run does not use up the celebration for the real morning post.
-      console.log(await app.jobs.morning(undefined, { remember: false }));
+      // --celebrate previews the big celebration (only while the streak is a record).
+      console.log(await app.jobs.morning(undefined, { remember: false, forceCelebration: argv.includes("--celebrate") }));
       break;
     case "weekly":
       console.log(await app.jobs.weekly(arg));
