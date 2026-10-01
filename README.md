@@ -125,7 +125,7 @@ Start the paste with a space, so bash does not save the keys in its history.
 | Database | `/var/lib/csat/csat.db` |
 | Backups | `/var/backups/csat`, nightly at 03:15, kept 14 days (`/etc/cron.d/csat-backup`) |
 | Service | `csat` (systemd), runs as user `csat` |
-| nginx | `/csat/` is forwarded to `127.0.0.1:3000` |
+| Apache | `/csat/` is forwarded to `127.0.0.1:3000` (`/etc/apache2/sites-available/000-default-le-ssl.conf`) |
 
 ### First setup
 
@@ -138,9 +138,26 @@ sudo -u csat node --env-file=.env --disable-warning=ExperimentalWarning scripts/
 cp deploy/csat.service /etc/systemd/system/ && systemctl daemon-reload && systemctl enable --now csat
 ```
 
-Put the blocks from `deploy/nginx-csat.conf` in the HTTPS `server { }` block,
-then `nginx -t && systemctl reload nginx`. Check with
-`curl https://middleware.ipaperdemo.io/csat/health` (expect `ok`).
+Forward `/csat/` in Apache to the app. This adds the lines from
+`deploy/apache-csat.conf` to the HTTPS site, makes a backup first, and puts
+the backup back if the config test fails:
+
+```bash
+F=/etc/apache2/sites-available/000-default-le-ssl.conf
+cp "$F" "$F.before-csat"
+a2enmod -q proxy proxy_http
+grep -q "ProxyPass /csat/" "$F" || awk '!done && /<\/VirtualHost>/ {
+  print "    # CSAT app: forward /csat/ to the Node app on port 3000"
+  print "    RedirectMatch 301 ^/csat$ /csat/"
+  print "    ProxyPreserveHost On"
+  print "    ProxyPass /csat/ http://127.0.0.1:3000/"
+  print "    ProxyPassReverse /csat/ http://127.0.0.1:3000/"
+  done = 1
+} { print }' "$F.before-csat" > "$F"
+apachectl configtest && systemctl reload apache2 || { cp "$F.before-csat" "$F"; echo "Config test failed. Old config restored."; }
+```
+
+Check with `curl https://middleware.ipaperdemo.io/csat/health` (expect `ok`).
 
 ### Deploy a new version
 
@@ -190,7 +207,7 @@ sqlite3 -header -column /var/lib/csat/csat.db "SELECT date(rated_at, 'unixepoch'
 | `node: .env: not found` | The command ran outside `/opt/csat`. Run `cd /opt/csat` first. |
 | `Intercom ... 401 token_unauthorized` | The Intercom app misses a scope. Add it in the Developer Hub (see Requirements). |
 | `Slack ...: not_in_channel` | Invite the bot to the channel. |
-| `/csat` says "dispatch_failed" or "operation_timeout" | Slack can't reach the server. Check nginx and the Request URL. |
+| `/csat` says "dispatch_failed" or "operation_timeout" | Slack can't reach the server. Check the Apache forwarding, the service, and the Request URL. |
 | `/csat` does nothing and the log shows "bad signature" | `SLACK_SIGNING_SECRET` is wrong or missing. |
 | A streak or record that looks too long | A period without CSAT data. Set `STREAK_START_DATE` after it. |
 
