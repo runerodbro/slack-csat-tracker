@@ -9,7 +9,7 @@ const streak = (current, isNewRecord = true) => ({
 
 test("first record post celebrates and covers milestones already passed", () => {
   const c = celebrationFor({ streak: streak(296), celebrated: new Set() });
-  assert.equal(c.title, "🏆 NEW RECORD! 🏆");
+  assert.equal(c.title, "🏆 NEW RECORD: 296 days of 100% positive ratings");
   assert.deepEqual(c.keys, ["2025-12-08:record", "2025-12-08:50", "2025-12-08:100", "2025-12-08:150", "2025-12-08:200", "2025-12-08:250"]);
 });
 
@@ -28,17 +28,33 @@ test("no celebration when the streak is not a record", () => {
   assert.equal(celebrationFor({ streak: streak(300, false), celebrated: new Set() }), null);
 });
 
-test("record post is gold with distance to the old record; celebration adds header and thanks", () => {
+test("record post: gold, no repeated text, no line above the bar", () => {
   const plain = streakMessage(streak(296));
+  assert.equal(plain.text, undefined);
   assert.equal(plain.attachments[0].color, "#D4A017");
-  assert.match(JSON.stringify(plain), /\+86 days/);
+  const json = JSON.stringify(plain.attachments[0].blocks);
+  assert.match(json, /New record: 296 days/);
+  assert.match(json, /\+86 days/);
+  assert.equal(json.match(/296 days/g).length, 1, "the number shows once");
+  assert.doesNotMatch(json, /Current streak/);
+});
 
+test("celebration: plain blocks with the header as the only headline", () => {
+  const title = "🏆 NEW RECORD: 296 days of 100% positive ratings";
   const party = streakMessage(streak(296), {
-    title: "🏆 NEW RECORD! 🏆", count: 250, fiveStar: 220, average: 4.88,
+    title, count: 250, fiveStar: 220, average: 4.88,
     agents: [{ name: "Ann", slackId: "U1", count: 90 }, { name: "Bo <x>", slackId: null, count: 40 }],
   });
-  const json = JSON.stringify(party);
-  assert.equal(party.attachments[0].blocks[0].type, "header");
+  assert.equal(party.attachments, undefined, "not collapsed behind Show more");
+  assert.equal(party.blocks[0].type, "header");
+  assert.equal(party.text, title);
+  const json = JSON.stringify(party.blocks);
+  assert.equal(json.match(/NEW RECORD/gi).length, 1, "NEW RECORD shows once");
+  assert.equal(json.match(/296 days/g).length, 1, "the number shows once");
+  assert.match(json, /\*\+86 days\* past the old record of 210 days/);
   assert.match(json, /250 ratings · 220 × 🤩 5\/5 · average 4.88/);
   assert.match(json, /<@U1> \(90\), Bo &lt;x&gt; \(40\)/);
+
+  const milestone = streakMessage(streak(301), { title: "🎉 300 days of 100% positive ratings!", count: 0, fiveStar: 0, average: 0, agents: [] });
+  assert.match(JSON.stringify(milestone.blocks), /Today: 301 days/);
 });

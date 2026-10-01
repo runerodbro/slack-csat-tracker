@@ -44,8 +44,11 @@ function field(label, value) {
   return { type: "mrkdwn", text: `*${label}*\n${value}` };
 }
 
+// The text goes in the attachment's fallback: Slack uses it for notifications
+// but does not show it in the channel. A top-level text would show as an extra
+// line above the colored bar.
 function wrap(text, color, blocks) {
-  return { text, attachments: [{ color, blocks }] };
+  return { attachments: [{ color, fallback: text, blocks }] };
 }
 
 function person(name, email, slackUserId) {
@@ -97,54 +100,71 @@ function recordText(record) {
   return `${days(record.length)} (${formatDate(addDays(record.from, 1))} – ${formatDate(record.to)})`;
 }
 
+function sinceText(streak) {
+  // since is the day of the last break; the streak starts the day after.
+  return streak.since ? formatDate(addDays(streak.since, 1)) : null;
+}
+
 // streak: result of computeStreak().
 // celebration (optional): { title, count, fiveStar, average, agents: [{ name, slackId, count }] }
 function streakMessage(streak, celebration = null) {
+  if (celebration) return celebrationMessage(streak, celebration);
+
   const headline = streak.isNewRecord
-    ? `🏆 *NEW RECORD!* ${days(streak.current)} of 100% positive ratings`
+    ? `🏆 *New record: ${days(streak.current)}* of 100% positive ratings`
     : `🔥 *CSAT streak: ${days(streak.current)}* of 100% positive ratings`;
-  const fields = [field("Current streak", days(streak.current))];
-  if (streak.isNewRecord) {
-    fields.push(field("Old record", recordText(streak.record)));
-    fields.push(field("Past the old record", `+${days(streak.current - streak.record.length)}`));
-  } else {
-    fields.push(field("Record", recordText(streak.record)));
+  const fields = streak.isNewRecord
+    ? [
+        field("Old record", recordText(streak.record)),
+        field("Past the old record", `+${days(streak.current - streak.record.length)}`),
+      ]
+    : [field("Record", recordText(streak.record))];
+  if (streak.since) fields.push(field("Streak started", sinceText(streak)));
+
+  const text = streak.isNewRecord
+    ? `🏆 New record: ${days(streak.current)} of 100% positive ratings`
+    : `🔥 CSAT streak: ${days(streak.current)} of 100% positive ratings`;
+  return wrap(text, streak.isNewRecord ? GOLD : GREEN, [
+    { type: "section", text: { type: "mrkdwn", text: headline } },
+    { type: "section", fields },
+  ]);
+}
+
+// Big celebration: plain blocks, not an attachment, so Slack never collapses
+// it behind "Show more". The header carries the message; nothing repeats it.
+function celebrationMessage(streak, celebration) {
+  const lines = [];
+  if (streak.record) {
+    lines.push(
+      `*+${days(streak.current - streak.record.length)}* past the old record of ${recordText(streak.record)}`,
+    );
   }
-  // since is the day of the last break; the streak starts the day after.
-  if (streak.since) fields.push(field("Streak started", formatDate(addDays(streak.since, 1))));
+  const context = [`Streak started ${sinceText(streak)}`];
+  if (!celebration.title.includes(`${streak.current} days`)) context.unshift(`Today: ${days(streak.current)}`);
 
-  const blocks = [];
-  if (celebration) blocks.push({ type: "header", text: { type: "plain_text", text: celebration.title, emoji: true } });
-  blocks.push({ type: "section", text: { type: "mrkdwn", text: headline } }, { type: "section", fields });
-
-  if (celebration) {
-    blocks.push({ type: "divider" });
-    if (celebration.count) {
-      blocks.push({
-        type: "section",
-        text: {
-          type: "mrkdwn",
-          text:
-            `*During this streak* 📈\n${celebration.count} ${celebration.count === 1 ? "rating" : "ratings"}` +
-            ` · ${celebration.fiveStar} × 🤩 5/5 · average ${celebration.average.toFixed(2)}`,
-        },
-      });
-    }
-    if (celebration.agents.length) {
-      const names = celebration.agents
-        .map((a) => `${a.slackId ? `<@${a.slackId}>` : escape(a.name)} (${a.count})`)
-        .join(", ");
-      blocks.push({ type: "section", text: { type: "mrkdwn", text: `*Thank you* 🙌\n${names}` } });
-    }
-    blocks.push({ type: "context", elements: [{ type: "mrkdwn", text: "🎊 Keep it going, team! 🎊" }] });
+  const blocks = [{ type: "header", text: { type: "plain_text", text: celebration.title, emoji: true } }];
+  if (lines.length) blocks.push({ type: "section", text: { type: "mrkdwn", text: lines.join("\n") } });
+  blocks.push({ type: "context", elements: [{ type: "mrkdwn", text: context.join(" · ") }] });
+  blocks.push({ type: "divider" });
+  if (celebration.count) {
+    blocks.push({
+      type: "section",
+      text: {
+        type: "mrkdwn",
+        text:
+          `*During this streak* 📈\n${celebration.count} ${celebration.count === 1 ? "rating" : "ratings"}` +
+          ` · ${celebration.fiveStar} × 🤩 5/5 · average ${celebration.average.toFixed(2)}`,
+      },
+    });
   }
-
-  const text = celebration
-    ? `${celebration.title} CSAT streak ${days(streak.current)}`
-    : streak.isNewRecord
-      ? `NEW RECORD: CSAT streak ${days(streak.current)}`
-      : `CSAT streak: ${days(streak.current)}`;
-  return wrap(text, streak.isNewRecord ? GOLD : GREEN, blocks);
+  if (celebration.agents.length) {
+    const names = celebration.agents
+      .map((a) => `${a.slackId ? `<@${a.slackId}>` : escape(a.name)} (${a.count})`)
+      .join(", ");
+    blocks.push({ type: "section", text: { type: "mrkdwn", text: `*Thank you* 🙌\n${names}` } });
+  }
+  blocks.push({ type: "context", elements: [{ type: "mrkdwn", text: "🎊 Keep it going, team!" }] });
+  return { text: celebration.title, blocks };
 }
 
 function recordVerdict({ length, previousRecordDays, isRecord }) {

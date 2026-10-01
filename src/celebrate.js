@@ -13,9 +13,9 @@ function highestMilestone(days) {
 function milestoneTitle(days) {
   if (days % 365 === 0) {
     const years = days / 365;
-    return `🎉 ${years === 1 ? "One full year" : `${years} full years`} of 100% positive ratings! 🎉`;
+    return `🎉 ${years === 1 ? "One full year" : `${years} full years`} of 100% positive ratings!`;
   }
-  return `🎉 ${days} days of 100% positive ratings! 🎉`;
+  return `🎉 ${days} days of 100% positive ratings!`;
 }
 
 // celebrated: Set of keys already celebrated. Returns { title, keys } or null.
@@ -30,7 +30,7 @@ function celebrationFor({ streak, celebrated }) {
     // Milestones already passed are part of this first celebration.
     const keys = [recordKey];
     for (let m = 50; m <= streak.current; m++) if (highestMilestone(m) === m) keys.push(`${streak.since}:${m}`);
-    return { title: "🏆 NEW RECORD! 🏆", keys };
+    return { title: `🏆 NEW RECORD: ${streak.current} days of 100% positive ratings`, keys };
   }
   if (milestone > 0 && !celebrated.has(milestoneKey)) {
     return { title: milestoneTitle(milestone), keys: [milestoneKey] };

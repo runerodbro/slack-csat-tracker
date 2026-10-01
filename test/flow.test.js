@@ -8,6 +8,8 @@ const { createServer } = require("../src/server");
 const { loadConfig } = require("../src/config");
 
 const realFetch = globalThis.fetch;
+// Text of a posted message: top-level text, or the attachment fallback.
+const textOf = (body) => body.text ?? body.attachments?.[0]?.fallback ?? "";
 
 function setup() {
   const config = loadConfig({
@@ -70,7 +72,7 @@ test("positive changed to negative: message updated and streak break posted; cha
   assert.equal(calls[1].path, "/chat.update");
   assert.equal(calls[1].body.ts, "1");
   assert.equal(calls[2].path, "/chat.postMessage");
-  assert.match(calls[2].body.text, /Streak has been broken/);
+  assert.match(textOf(calls[2].body), /Streak has been broken/);
   assert.equal(app.ratings.currentStreak().current, 0);
 
   state.rating = rating(4);
@@ -79,7 +81,7 @@ test("positive changed to negative: message updated and streak break posted; cha
   assert.equal(calls[3].body.ts, "1"); // rating message updated
   assert.equal(calls[4].path, "/chat.update");
   assert.equal(calls[4].body.ts, "2"); // break message updated
-  assert.match(calls[4].body.text, /restored/);
+  assert.match(textOf(calls[4].body), /restored/);
   assert.ok(app.ratings.currentStreak().current > 0);
 });
 
@@ -128,7 +130,7 @@ test("history rating that changes is posted, and a failed post is retried", asyn
   global.fetch = fetchOk;
 
   assert.equal(await app.ratings.processConversation("42"), "posted");
-  assert.match(slackCalls().at(-1).body.text, /Streak has been broken/);
+  assert.match(textOf(slackCalls().at(-1).body), /Streak has been broken/);
 });
 
 test("morning: record celebration once, with reactions; a test run does not use it up", async () => {
@@ -143,9 +145,9 @@ test("morning: record celebration once, with reactions; a test run does not use 
   const reactions = () => state.calls.filter((c) => c.path === "/reactions.add");
 
   let r = await app.jobs.morning("2026-10-05", { remember: false });
-  assert.equal(r.celebration, "🏆 NEW RECORD! 🏆");
+  assert.match(r.celebration, /^🏆 NEW RECORD: \d+ days of 100% positive ratings$/);
   r = await app.jobs.morning("2026-10-05");
-  assert.equal(r.celebration, "🏆 NEW RECORD! 🏆", "test run did not use it up");
+  assert.match(r.celebration, /NEW RECORD/, "test run did not use it up");
   assert.match(JSON.stringify(posts().at(-1).body), /<@UANN> \(1\)/);
   assert.equal(reactions().length, 4);
 
@@ -182,7 +184,7 @@ test("/csat here: only admins, needs the bot in the channel, then all posts go t
   const update = state.calls.filter((c) => c.path === "/chat.update").at(-1);
   assert.equal(update.body.channel, "C1");
   assert.equal(posts().at(-1).body.channel, "C3");
-  assert.match(posts().at(-1).body.text, /Streak has been broken/);
+  assert.match(textOf(posts().at(-1).body), /Streak has been broken/);
 
   r = await app.commands.handle({ text: "status", user_id: "UNOBODY" });
   assert.match(r.text, /<#C3>, set by <@UFRIEND>/);

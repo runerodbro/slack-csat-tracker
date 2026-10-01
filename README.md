@@ -17,11 +17,15 @@ positive ratings, celebrates records, and sends a weekly report.
     "🔥 CSAT streak: 296 days of 100% positive ratings", with the record and
     the date the streak started.
   - When the current streak is longer than the record, the post is gold and
-    says "🏆 NEW RECORD!", with the number of days past the old record.
+    says "🏆 New record: 297 days of 100% positive ratings", with the number
+    of days past the old record.
   - Big celebration on the first record post of a streak and on milestones
-    (every 50 days, every full year): a header, statistics for the streak,
-    thanks with @mentions of the 5 agents with the most ratings in the streak,
-    and 🎉🏆 reactions. A milestone on a weekend is celebrated on Monday.
+    (every 50 days, every full year): a large header that carries the message
+    ("🏆 NEW RECORD: 297 days of 100% positive ratings" or "🎉 300 days of 100%
+    positive ratings!"), statistics for the streak, thanks with @mentions of
+    the 5 agents with the most ratings in the streak, and 🎉🏆 reactions. It
+    uses plain blocks, so Slack does not collapse it behind "Show more". A
+    milestone on a weekend is celebrated on Monday.
   - A 1–3 rating posts "Streak has been broken 😭" after the 5-minute delay,
     with how long the streak lasted and whether it beat the record. Only the
     first 1–3 rating of a day posts this.
@@ -54,9 +58,11 @@ positive ratings, celebrates records, and sends a weekly report.
 | Rating 1–3, streak broken | Imperial Red `#EE2737` |
 | NEW RECORD | Gold `#D4A017` |
 | Break restored | Gray 3 `#B6BBBF` |
-| Weekly report | No side bar (plain blocks, so Slack does not collapse it) |
+| Weekly report, big celebration | No side bar (plain blocks, so Slack does not collapse them) |
 
-Green and gold are outside the iPaper palette by choice. Green has at least 3:1
+Posts with a side bar put their notification text in the attachment's
+`fallback`, so no extra line shows above the bar. Green and gold are outside
+the iPaper palette by choice. Green has at least 3:1
 contrast on Slack's light and dark theme; gold is fainter on the light theme.
 
 ### Schedule and restarts
