@@ -88,6 +88,11 @@ const MIGRATIONS = [
   ALTER TABLE ratings ADD COLUMN slack_channel TEXT;
   ALTER TABLE streak_breaks ADD COLUMN slack_channel TEXT;
   `,
+  `
+  -- Who closed the conversation before the rating: 'human', 'bot' or 'unknown'.
+  -- NULL: not checked yet (counts as human). Ratings closed by a bot do not count.
+  ALTER TABLE ratings ADD COLUMN closed_by TEXT;
+  `,
 ];
 
 function schemaVersion(db) {

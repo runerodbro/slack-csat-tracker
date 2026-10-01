@@ -28,7 +28,12 @@ function setup() {
       if (u.pathname === "/admins") return json({ admins: [{ id: 7, name: "Ann", email: "ann@x.io" }] });
       if (u.pathname.startsWith("/contacts/")) return json({ name: "Cy", email: "cy@example.com" });
       if (u.pathname.startsWith("/conversations/")) {
-        return json({ id: "42", conversation_rating: state.rating });
+        const id = u.pathname.split("/").pop();
+        const parts = state.closers?.[id];
+        return json({
+          id, conversation_rating: state.rating,
+          ...(parts && { conversation_parts: { conversation_parts: [{ part_type: "close", created_at: 1, author: { type: parts } }] } }),
+        });
       }
     }
     if (u.pathname === "/users.lookupByEmail") return json({ ok: true, user: { id: "UANN" } });
@@ -232,4 +237,43 @@ test("CLI channel override wins over the Slack setting", async () => {
   assert.equal(app.getChannel(), "CTEST");
   const app2 = createApp(config, { db, log: { info() {}, warn() {}, error() {} } });
   assert.equal(app2.getChannel(), "C9");
+});
+
+test("closed by a bot: saved, but no post, no streak break, and only a separate line in the weekly report", async () => {
+  const { app, state, slackCalls } = setup();
+  state.closers = { "50": "bot", "51": "admin" };
+  const now = Math.floor(Date.now() / 1000);
+
+  state.rating = rating(1, now);
+  assert.equal(await app.ratings.processConversation("50"), "saved (closed by a bot)");
+  assert.equal(slackCalls().length, 0, "no rating post, no break post");
+  const before = app.ratings.currentStreak();
+  assert.ok(before.current > 0, "a bot's 1/5 does not break the streak");
+
+  state.rating = rating(5, now);
+  assert.equal(await app.ratings.processConversation("51"), "posted");
+
+  const today = app.clock.localDate(now);
+  const p = app.clock.parts(now);
+  // The report Friday on or after today, so the window holds both ratings.
+  const { addDays } = require("../src/time");
+  const friday = addDays(today, (5 - p.weekday + 7) % 7 + (p.weekday === 5 && p.hour >= 14 ? 7 : 0));
+  const stats = await app.jobs.weekly(friday);
+  assert.equal(stats.total, 1, "only the human rating counts");
+  const report = state.calls.filter((c) => c.path === "/chat.postMessage").at(-1).body;
+  assert.match(JSON.stringify(report), /Closed by Fin or a bot, not counted above: 1 rating · average 1.00/);
+});
+
+test("classify: checks saved ratings once and a bot close leaves the streak", async () => {
+  const { app, state } = setup();
+  const day = Date.parse("2026-06-01T10:00:00Z") / 1000;
+  state.rating = rating(2, day);
+  await app.ratings.processConversation("60", { post: false }); // saved before closers were known
+  app.db.prepare("UPDATE ratings SET closed_by = NULL").run();
+  assert.equal(app.ratings.currentStreak("2026-06-05").since, "2026-06-01");
+
+  state.closers = { "60": "bot" };
+  assert.deepEqual(await app.jobs.classify(), { human: 0, bot: 1, unknown: 0, failed: 0 });
+  assert.equal(app.ratings.currentStreak("2026-06-05").since, "2026-01-01", "the bot's 2/5 no longer breaks the streak");
+  assert.deepEqual(await app.jobs.classify(), { human: 0, bot: 0, unknown: 0, failed: 0 }, "nothing left to check");
 });
