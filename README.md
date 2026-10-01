@@ -38,6 +38,13 @@ positive ratings, celebrates records, and sends a weekly report.
   Friday 14:00: number of ratings, average, % positive, distribution, and the
   top 5 agents by number of ratings with average and % positive. Ratings
   without an agent count in the totals, not in the agent list.
+- **Human ratings only.** A rating counts only when a human closed the
+  conversation: Intercom asks for the rating at that close. The app takes the
+  last close before the rating; closed by a teammate (`admin`) counts, closed
+  by Fin, a renamed AI agent, a chatbot or a workflow (`bot`) does not. Those
+  ratings are saved but get no Slack post and stay out of the streak, record,
+  celebration and weekly numbers; the weekly report shows their count on one
+  separate line. A rating with no close found counts as human.
 - **Reconciliation.** Every hour the app asks Intercom for ratings from the
   last 3 days and processes any the webhook missed.
 - **`/csat` slash command in Slack.**
@@ -190,6 +197,7 @@ sudo -u csat node --env-file=.env --disable-warning=ExperimentalWarning scripts/
 | Command | What it does |
 |---|---|
 | `backfill [days]` | Imports ratings from the last N days (default 365) without Slack posts. Shows progress. Safe to run again. |
+| `classify` | Checks who closed each saved rating that was not checked yet (one Intercom call each). Run once after updating; safe to run again. |
 | `streak` | Prints the streak and record. No post. |
 | `morning` | Posts the streak now. A test run does not use up a celebration. Add `--celebrate` to preview the big celebration (only while the streak is a record). |
 | `weekly [YYYY-MM-DD]` | Posts the weekly report for the Friday given, default the last report Friday. |

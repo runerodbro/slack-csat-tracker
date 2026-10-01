@@ -252,6 +252,15 @@ function weeklyMessage({ stats, from, to }) {
   blocks.push({ type: "section", text: { type: "mrkdwn", text: `*Top agents*\n${agents}` } });
 
   // Plain blocks, not an attachment: Slack collapses long attachments behind "Show more".
+  if (stats.bots?.count) {
+    blocks.push({
+      type: "context",
+      elements: [{
+        type: "mrkdwn",
+        text: `🤖 Closed by Fin or a bot, not counted above: ${stats.bots.count} ${stats.bots.count === 1 ? "rating" : "ratings"} · average ${stats.bots.average.toFixed(2)}`,
+      }],
+    });
+  }
   return { text: `Weekly CSAT report: ${stats.total} ratings, average ${stats.average.toFixed(2)}`, blocks };
 }
 

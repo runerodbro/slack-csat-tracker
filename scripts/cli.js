@@ -1,5 +1,6 @@
 // Run a job by hand. Examples:
 //   node --env-file=.env scripts/cli.js backfill 365   import history, no Slack posts
+//   node --env-file=.env scripts/cli.js classify       check who closed each saved rating
 //   node --env-file=.env scripts/cli.js streak         print the streak, no Slack post
 //   node --env-file=.env scripts/cli.js morning        post the streak message now
 //   node --env-file=.env scripts/cli.js weekly [YYYY-MM-DD]   post the weekly report now
@@ -46,6 +47,15 @@ async function main() {
       console.log(app.ratings.currentStreak());
       break;
     }
+    case "classify": {
+      console.log("Checking who closed each saved rating...");
+      const counts = await app.jobs.classify({
+        onProgress: (c) => console.log(`  ${c.checked}/${c.total} checked: ${c.human} human, ${c.bot} bot, ${c.unknown} unknown`),
+      });
+      console.log(counts);
+      console.log({ startDate: app.ratings.streakStartDate(), ...app.ratings.currentStreak() });
+      break;
+    }
     case "streak":
       console.log({ startDate: app.ratings.streakStartDate(), ...app.ratings.currentStreak() });
       break;
@@ -65,7 +75,7 @@ async function main() {
       console.log(await app.ratings.processConversation(arg));
       break;
     default:
-      console.log("Commands: backfill [days], streak, morning, weekly [YYYY-MM-DD], reconcile, post <id>");
+      console.log("Commands: backfill [days], classify, streak, morning, weekly [YYYY-MM-DD], reconcile, post <id>");
       process.exitCode = 1;
   }
   app.db.close();

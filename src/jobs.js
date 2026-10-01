@@ -2,6 +2,7 @@
 
 const { nowSeconds, addDays } = require("./time");
 const { celebrationFor } = require("./celebrate");
+const { closedBy, COUNTS_SQL } = require("./closer");
 const { weeklyStats } = require("./report");
 const messages = require("./messages");
 
@@ -11,14 +12,19 @@ const LATE_POST_LIMIT = 6 * 60 * 60;
 
 function createJobs({ db, intercom, slack, clock, ratings, queue, log = console }) {
   const weekRows = db.prepare(
-    "SELECT score, admin_id, admin_name FROM ratings WHERE rated_at >= ? AND rated_at < ?",
+    `SELECT score, admin_id, admin_name FROM ratings WHERE rated_at >= ? AND rated_at < ? AND ${COUNTS_SQL}`,
   );
+  const weekBotRows = db.prepare(
+    "SELECT COUNT(*) AS count, AVG(score) AS average FROM ratings WHERE rated_at >= ? AND rated_at < ? AND closed_by = 'bot'",
+  );
+  const unclassified = db.prepare("SELECT conversation_id FROM ratings WHERE closed_by IS NULL");
+  const setClosedBy = db.prepare("UPDATE ratings SET closed_by = ? WHERE conversation_id = ?");
   const getRating = db.prepare("SELECT score, remark FROM ratings WHERE conversation_id = ?");
 
   const celebratedKeys = db.prepare("SELECT run_key FROM scheduled_runs WHERE job = 'celebration'");
   const markCelebrated = db.prepare("INSERT OR IGNORE INTO scheduled_runs (job, run_key) VALUES ('celebration', ?)");
   const streakRows = db.prepare(
-    "SELECT score, admin_id, admin_name, admin_email FROM ratings WHERE rated_at >= ?",
+    `SELECT score, admin_id, admin_name, admin_email FROM ratings WHERE rated_at >= ? AND ${COUNTS_SQL}`,
   );
 
   async function streakStats(since) {
@@ -72,6 +78,7 @@ function createJobs({ db, intercom, slack, clock, ratings, queue, log = console 
     const start = clock.epochAt(addDays(friday, -7), 14, 0);
     const end = clock.epochAt(friday, 14, 0);
     const stats = weeklyStats(weekRows.all(start, end));
+    stats.bots = weekBotRows.get(start, end);
     const label = (epoch) => {
       const p = clock.parts(epoch);
       return new Date(Date.UTC(p.year, p.month - 1, p.day)).toLocaleDateString("en-GB", {
@@ -123,7 +130,25 @@ function createJobs({ db, intercom, slack, clock, ratings, queue, log = console 
     return saved;
   }
 
-  return { morning, weekly, reconcile, backfill, lastReportFriday };
+  // Checks who closed each saved rating that was not checked yet.
+  async function classify({ onProgress = () => {} } = {}) {
+    const counts = { human: 0, bot: 0, unknown: 0, failed: 0 };
+    const rows = unclassified.all();
+    for (const [i, row] of rows.entries()) {
+      try {
+        const closer = closedBy(await intercom.getConversation(row.conversation_id)) ?? "unknown";
+        setClosedBy.run(closer, row.conversation_id);
+        counts[closer]++;
+      } catch (err) {
+        counts.failed++;
+        log.warn(`Classify ${row.conversation_id}: ${err.message}`);
+      }
+      if ((i + 1) % 50 === 0) onProgress({ checked: i + 1, total: rows.length, ...counts });
+    }
+    return counts;
+  }
+
+  return { morning, weekly, reconcile, backfill, classify, lastReportFriday };
 }
 
 module.exports = { createJobs };

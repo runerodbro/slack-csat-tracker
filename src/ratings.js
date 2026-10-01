@@ -7,23 +7,24 @@
 const { nowSeconds } = require("./time");
 const { isNegative, computeStreak, breakInfo } = require("./streak");
 const messages = require("./messages");
+const { closedBy, COUNTS_SQL } = require("./closer");
 
 function createRatings({ db, intercom, slack, clock, config, log = console }) {
   const q = {
     get: db.prepare("SELECT * FROM ratings WHERE conversation_id = ?"),
     insert: db.prepare(`
       INSERT INTO ratings (conversation_id, score, remark, admin_id, admin_name, admin_email,
-                           contact_id, contact_name, contact_email, rated_at, source)
+                           contact_id, contact_name, contact_email, rated_at, source, closed_by)
       VALUES (:conversation_id, :score, :remark, :admin_id, :admin_name, :admin_email,
-              :contact_id, :contact_name, :contact_email, :rated_at, :source)`),
+              :contact_id, :contact_name, :contact_email, :rated_at, :source, :closed_by)`),
     update: db.prepare(`
       UPDATE ratings SET score = :score, remark = :remark, admin_id = :admin_id, admin_name = :admin_name,
              admin_email = :admin_email, contact_id = :contact_id, contact_name = :contact_name,
-             contact_email = :contact_email, rated_at = :rated_at, source = :source, updated_at = unixepoch()
+             contact_email = :contact_email, rated_at = :rated_at, source = :source, closed_by = :closed_by, updated_at = unixepoch()
       WHERE conversation_id = :conversation_id`),
     posted: db.prepare("UPDATE ratings SET slack_ts = ?, slack_channel = ?, posted_at = ? WHERE conversation_id = ?"),
-    negatives: db.prepare("SELECT rated_at FROM ratings WHERE score <= 3 AND conversation_id IS NOT ?"),
-    firstRating: db.prepare("SELECT MIN(rated_at) AS first FROM ratings"),
+    negatives: db.prepare(`SELECT rated_at FROM ratings WHERE score <= 3 AND ${COUNTS_SQL} AND conversation_id IS NOT ?`),
+    firstRating: db.prepare(`SELECT MIN(rated_at) AS first FROM ratings WHERE ${COUNTS_SQL}`),
     getBreak: db.prepare("SELECT * FROM streak_breaks WHERE conversation_id = ?"),
     saveBreak: db.prepare(`
       INSERT INTO streak_breaks (conversation_id, broken_at, length_days, was_record, previous_record_days,
@@ -106,7 +107,7 @@ function createRatings({ db, intercom, slack, clock, config, log = console }) {
 
   // post: false saves the rating without Slack messages (history import).
   async function processConversation(conversationId, { post = true, conversation = null } = {}) {
-    const conv = conversation?.conversation_rating ? conversation : await intercom.getConversation(conversationId);
+    let conv = conversation?.conversation_rating ? conversation : await intercom.getConversation(conversationId);
     const rating = conv.conversation_rating;
     if (!rating || rating.rating == null) return "no-rating";
 
@@ -117,8 +118,18 @@ function createRatings({ db, intercom, slack, clock, config, log = console }) {
     const changed = Boolean(existing) && (existing.score !== score || (existing.remark || null) !== remark);
     const now = nowSeconds();
 
+    // Who closed the conversation. Search results come without the parts, so
+    // load the full conversation for a new or changed rating.
+    let closer = existing?.closed_by ?? null;
+    if (!existing || changed) {
+      if (closedBy(conv) === undefined) conv = await intercom.getConversation(id);
+      closer = closedBy(conv) ?? "unknown";
+    }
+    const byBot = closer === "bot";
+
     // Silent history rows only get Slack messages when the rating changes later.
-    const active = post && (!existing || changed || existing.source !== "backfill");
+    // Ratings on conversations closed by a bot never get Slack messages.
+    const active = post && !byBot && (!existing || changed || existing.source !== "backfill");
     const needsPost = active && !existing?.slack_ts;
     const needsUpdate = active && changed && Boolean(existing?.slack_ts);
 
@@ -147,12 +158,14 @@ function createRatings({ db, intercom, slack, clock, config, log = console }) {
         // A silent history row that changes becomes a normal row, so a failed
         // post is retried.
         source: post ? "webhook" : existing?.source || "backfill",
+        closed_by: closer,
       };
       if (existing) q.update.run(row);
       else q.insert.run(row);
       row = { ...existing, ...row };
     }
 
+    if (byBot) return existing ? "unchanged (closed by a bot)" : "saved (closed by a bot)";
     if (!active) return existing ? "unchanged" : "saved";
 
     const url = await intercom.conversationUrl(id);
