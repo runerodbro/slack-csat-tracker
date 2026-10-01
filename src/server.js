@@ -1,5 +1,5 @@
 // HTTP server: Intercom webhook, Slack slash command and health check.
-// nginx forwards https://<host>/csat/... to this server without the /csat prefix.
+// Apache forwards https://<host>/csat/... to this server without the /csat prefix.
 
 const http = require("http");
 const { nowSeconds } = require("./time");
