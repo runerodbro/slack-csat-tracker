@@ -106,7 +106,7 @@ function sinceText(streak) {
 }
 
 // streak: result of computeStreak().
-// celebration (optional): { title, count, fiveStar, average, agents: [{ name, slackId, count }] }
+// celebration (optional): { title, count, fiveStar, fourStar, average, agents: [{ name, slackId, count }] }
 function streakMessage(streak, celebration = null) {
   if (celebration) return celebrationMessage(streak, celebration);
 
@@ -153,7 +153,10 @@ function celebrationMessage(streak, celebration) {
         type: "mrkdwn",
         text:
           `*During this streak* 📈\n${celebration.count} ${celebration.count === 1 ? "rating" : "ratings"}` +
-          ` · ${celebration.fiveStar} × 🤩 5/5 · average ${celebration.average.toFixed(2)}`,
+          ` · average ${celebration.average.toFixed(2)}\n` +
+          // A streak holds only 4 and 5 ratings, so the two add up to the total.
+          `🤩 5/5: ${celebration.fiveStar} (${pct(celebration.fiveStar / celebration.count)})` +
+          ` · 😃 4/5: ${celebration.fourStar} (${pct(celebration.fourStar / celebration.count)})`,
       },
     });
   }

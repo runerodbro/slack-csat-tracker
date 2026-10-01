@@ -36,6 +36,7 @@ function createJobs({ db, intercom, slack, clock, ratings, queue, log = console 
     return {
       count: rows.length,
       fiveStar: rows.filter((r) => r.score === 5).length,
+      fourStar: rows.filter((r) => r.score === 4).length,
       average: rows.length ? rows.reduce((sum, r) => sum + r.score, 0) / rows.length : 0,
       agents: top,
     };
