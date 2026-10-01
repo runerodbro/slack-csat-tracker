@@ -16,7 +16,7 @@ test("weekly stats and ranking", () => {
   assert.equal(stats.average, 4);
   assert.equal(stats.positiveShare, 4 / 6);
   assert.deepEqual(stats.distribution, { 1: 0, 2: 1, 3: 1, 4: 1, 5: 3 });
-  assert.deepEqual(stats.agents.map((a) => [a.name, a.count]), [["Bo", 3], ["Ann", 2], ["Unassigned", 1]]);
+  assert.deepEqual(stats.agents.map((a) => [a.name, a.count]), [["Bo", 3], ["Ann", 2]], "no Unassigned entry");
   assert.equal(stats.agents[0].positiveShare, 2 / 3);
 
   const text = JSON.stringify(weeklyMessage({ stats, from: "a", to: "b" }));

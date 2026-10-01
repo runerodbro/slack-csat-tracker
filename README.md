@@ -23,7 +23,8 @@ positive ratings, celebrates records, and sends a weekly report.
     (every 50 days, every full year): a large header that carries the message
     ("🏆 NEW RECORD: 297 days of 100% positive ratings" or "🎉 300 days of 100%
     positive ratings!"), statistics for the streak, thanks with @mentions of
-    the 5 agents with the most ratings in the streak, and 🎉🏆 reactions. It
+    the 5 agents with the most ratings in the streak (ratings without an
+    agent count in the statistics only), and 🎉🏆 reactions. It
     uses plain blocks, so Slack does not collapse it behind "Show more". A
     milestone on a weekend is celebrated on Monday.
   - A 1–3 rating posts "Streak has been broken 😭" after the 5-minute delay,
@@ -34,7 +35,8 @@ positive ratings, celebrates records, and sends a weekly report.
     and the streak is calculated again.
 - **Weekly report.** Friday at 14:00 Copenhagen time, for Friday 14:00 to
   Friday 14:00: number of ratings, average, % positive, distribution, and the
-  top 5 agents by number of ratings with average and % positive.
+  top 5 agents by number of ratings with average and % positive. Ratings
+  without an agent count in the totals, not in the agent list.
 - **Reconciliation.** Every hour the app asks Intercom for ratings from the
   last 3 days and processes any the webhook missed.
 - **`/csat` slash command in Slack.**

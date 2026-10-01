@@ -140,6 +140,9 @@ test("morning: record celebration once, with reactions; a test run does not use 
   await app.ratings.processConversation("42", { post: false });
   state.rating = { ...rating(5, Date.parse("2026-05-01T10:00:00Z") / 1000), teammate: { id: 7 } };
   await app.ratings.processConversation("43", { post: false, conversation: { id: "43", conversation_rating: state.rating } });
+  // A rating without an agent: counts in the stats, not in the thanks.
+  const unassigned = { ...rating(5, Date.parse("2026-05-02T10:00:00Z") / 1000), teammate: { id: 999 } };
+  await app.ratings.processConversation("44", { post: false, conversation: { id: "44", conversation_rating: unassigned } });
 
   const posts = () => state.calls.filter((c) => c.path === "/chat.postMessage");
   const reactions = () => state.calls.filter((c) => c.path === "/reactions.add");
@@ -148,7 +151,10 @@ test("morning: record celebration once, with reactions; a test run does not use 
   assert.match(r.celebration, /^🏆 NEW RECORD: \d+ days of 100% positive ratings$/);
   r = await app.jobs.morning("2026-10-05");
   assert.match(r.celebration, /NEW RECORD/, "test run did not use it up");
-  assert.match(JSON.stringify(posts().at(-1).body), /<@UANN> \(1\)/);
+  const celebration = JSON.stringify(posts().at(-1).body);
+  assert.match(celebration, /<@UANN> \(1\)/);
+  assert.match(celebration, /2 ratings/);
+  assert.doesNotMatch(celebration, /Unassigned|Unknown/);
   assert.equal(reactions().length, 4);
 
   r = await app.jobs.morning("2026-10-06");

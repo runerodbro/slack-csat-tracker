@@ -14,12 +14,13 @@ function weeklyStats(rows) {
     sum += row.score;
     if (!isNegative(row.score)) positive++;
 
-    const key = row.admin_id || "unassigned";
-    const agent = agents.get(key) || { name: row.admin_name || "Unassigned", count: 0, sum: 0, positive: 0 };
+    // Top agents lists real agents only; ratings without one still count in the totals.
+    if (!row.admin_id) continue;
+    const agent = agents.get(row.admin_id) || { name: row.admin_name || "Unknown agent", count: 0, sum: 0, positive: 0 };
     agent.count++;
     agent.sum += row.score;
     if (!isNegative(row.score)) agent.positive++;
-    agents.set(key, agent);
+    agents.set(row.admin_id, agent);
   }
 
   const total = rows.length;

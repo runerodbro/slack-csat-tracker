@@ -24,11 +24,12 @@ function createJobs({ db, intercom, slack, clock, ratings, queue, log = console 
   async function streakStats(since) {
     const rows = streakRows.all(clock.epochAt(addDays(since, 1), 0, 0));
     const agents = new Map();
+    // Only real agents get thanks; ratings without one still count in the totals.
     for (const r of rows) {
-      const key = r.admin_id || "unassigned";
-      const a = agents.get(key) || { name: r.admin_name || "Unassigned", email: r.admin_email, count: 0 };
+      if (!r.admin_id) continue;
+      const a = agents.get(r.admin_id) || { name: r.admin_name || "Unknown agent", email: r.admin_email, count: 0 };
       a.count++;
-      agents.set(key, a);
+      agents.set(r.admin_id, a);
     }
     const top = [...agents.values()].sort((a, b) => b.count - a.count || a.name.localeCompare(b.name)).slice(0, 5);
     for (const a of top) a.slackId = await slack.userIdByEmail(a.email);
