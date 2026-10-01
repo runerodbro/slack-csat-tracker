@@ -155,8 +155,8 @@ function celebrationMessage(streak, celebration) {
           `*During this streak* 📈\n${celebration.count} ${celebration.count === 1 ? "rating" : "ratings"}` +
           ` · average ${celebration.average.toFixed(2)}\n` +
           // A streak holds only 4 and 5 ratings, so the two add up to the total.
-          `🤩 5/5: ${celebration.fiveStar} (${pct(celebration.fiveStar / celebration.count)})` +
-          ` · 😃 4/5: ${celebration.fourStar} (${pct(celebration.fourStar / celebration.count)})`,
+          `🤩 ${celebration.fiveStar} (${pct(celebration.fiveStar / celebration.count)})` +
+          ` · 😃 ${celebration.fourStar} (${pct(celebration.fourStar / celebration.count)})`,
       },
     });
   }

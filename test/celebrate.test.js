@@ -52,7 +52,7 @@ test("celebration: plain blocks with the header as the only headline", () => {
   assert.equal(json.match(/NEW RECORD/gi).length, 1, "NEW RECORD shows once");
   assert.equal(json.match(/296 days/g).length, 1, "the number shows once");
   assert.match(json, /\*\+86 days\* past the old record of 210 days/);
-  assert.match(json, /250 ratings · average 4.88\\n🤩 5\/5: 220 \(88%\) · 😃 4\/5: 30 \(12%\)/);
+  assert.match(json, /250 ratings · average 4.88\\n🤩 220 \(88%\) · 😃 30 \(12%\)/);
   assert.match(json, /<@U1> \(90\), Bo &lt;x&gt; \(40\)/);
 
   const milestone = streakMessage(streak(301), { title: "🎉 300 days of 100% positive ratings!", count: 0, fiveStar: 0, fourStar: 0, average: 0, agents: [] });
