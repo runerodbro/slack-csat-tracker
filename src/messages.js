@@ -51,46 +51,40 @@ function wrap(text, color, blocks) {
   return { attachments: [{ color, fallback: text, blocks }] };
 }
 
-function person(name, email, slackUserId) {
-  if (slackUserId) return `<@${slackUserId}>`;
-  if (name && email) return `${escape(name)}\n${escape(email)}`;
-  return escape(name || email || "Unknown");
-}
-
 function scoreLine(score) {
   const s = SCORES[score];
   return `${s.emoji} ${stars(score)}  ${score}/5 ${s.label}`;
 }
 
 // rating: row from the ratings table. change: { from } when the score changed.
+// A compact list, like Supportman's. The comment line only shows when there is one.
 function ratingMessage({ rating, url, assigneeSlackId, change }) {
   const s = SCORES[rating.score];
-  let comment = rating.remark ? escape(rating.remark) : "_No comment_";
-  if (comment.length > MAX_COMMENT) comment = `${comment.slice(0, MAX_COMMENT)}…`;
+  const assignee = assigneeSlackId ? `<@${assigneeSlackId}>` : escape(rating.admin_name || "Unassigned");
+  const name = rating.contact_name ? `_${escape(rating.contact_name)}_` : "";
+  const email = rating.contact_email ? escape(rating.contact_email) : "";
+  const customer = name && email ? `${name} (${email})` : name || email || "Unknown";
 
-  const blocks = [
-    { type: "section", text: { type: "mrkdwn", text: `*${s.emoji} New CSAT rating: ${s.label}*` } },
-    {
-      type: "section",
-      fields: [
-        field("Assignee", person(rating.admin_name, null, assigneeSlackId)),
-        field("Customer", person(rating.contact_name, rating.contact_email)),
-        field("Rating", scoreLine(rating.score)),
-      ],
-    },
-    { type: "section", text: { type: "mrkdwn", text: `*Comment*\n${comment}` } },
-    { type: "context", elements: [{ type: "mrkdwn", text: `<${url}|View conversation in Intercom →>` }] },
+  const lines = [
+    "*Conversation rated:*",
+    `• *Assignee:* ${assignee}`,
+    `• *Customer:* ${customer}`,
+    `• *Rating:* ${s.emoji}`,
   ];
-  if (change && change.from !== rating.score) {
-    blocks.push({
-      type: "context",
-      elements: [{ type: "mrkdwn", text: `✏️ Rating changed from ${change.from}/5 to ${rating.score}/5` }],
-    });
+  if (rating.remark) {
+    let comment = escape(rating.remark).replace(/\s*\n\s*/g, " ");
+    if (comment.length > MAX_COMMENT) comment = `${comment.slice(0, MAX_COMMENT)}…`;
+    lines.push(`• *Comment:* “${comment}”`);
   }
+  if (change && change.from !== rating.score) {
+    lines.push(`• *Changed:* ${SCORES[change.from].emoji} → ${s.emoji}`);
+  }
+  lines.push(`<${url}|View conversation>`);
+
   return wrap(
-    `${s.emoji} CSAT ${rating.score}/5 for ${rating.admin_name || "unassigned"}`,
+    `${s.emoji} ${s.label} rating for ${rating.admin_name || "unassigned"}`,
     alert(isNegative(rating.score)),
-    blocks,
+    [{ type: "section", text: { type: "mrkdwn", text: lines.join("\n") } }],
   );
 }
 

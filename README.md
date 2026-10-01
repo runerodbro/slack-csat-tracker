@@ -6,8 +6,9 @@ positive ratings, celebrates records, and sends a weekly report.
 ## What it does
 
 - **Rating posts.** Each Intercom rating (1–5) is posted to Slack 5 minutes
-  after it arrives, with assignee (@mention when the email matches a Slack
-  user), customer, rating, comment and a link to the conversation. If the
+  after it arrives, as a compact list like Supportman's: assignee (@mention
+  when the email matches a Slack user), customer, rating emoji, the comment if
+  there is one, and a link to the conversation. If the
   customer changes the rating within the 5 minutes, only the final rating is
   posted. If it changes later, the Slack message is updated.
 - **Streak.** The number of days since the last day with a 1–3 rating. Days

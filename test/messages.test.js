@@ -6,21 +6,26 @@ const rating = {
   score: 2, remark: "Slow <b>reply</b> & rude", admin_name: "Ann", contact_name: "Cy", contact_email: "cy@example.com",
 };
 
-test("rating message: fields, escaping, red bar for negative", () => {
+test("rating message: compact list, escaping, red bar for negative, change shown", () => {
   const msg = ratingMessage({ rating, url: "https://x/1", assigneeSlackId: "U1", change: { from: 5 } });
-  const json = JSON.stringify(msg);
   assert.equal(msg.attachments[0].color, "#EE2737");
-  assert.match(json, /<@U1>/);
-  assert.match(json, /Slow &lt;b&gt;reply&lt;\/b&gt; &amp; rude/);
-  assert.match(json, /changed from 5\/5 to 2\/5/);
-  assert.match(json, /https:\/\/x\/1/);
+  assert.equal(msg.attachments[0].blocks.length, 1, "one block");
+  const text = msg.attachments[0].blocks[0].text.text;
+  assert.equal(
+    text,
+    "*Conversation rated:*\n• *Assignee:* <@U1>\n• *Customer:* _Cy_ (cy@example.com)\n• *Rating:* 🙁\n" +
+      "• *Comment:* “Slow &lt;b&gt;reply&lt;/b&gt; &amp; rude”\n• *Changed:* 🤩 → 🙁\n<https://x/1|View conversation>",
+  );
 });
 
-test("rating message: green bar for positive, no Slack user falls back to name", () => {
-  const msg = ratingMessage({ rating: { ...rating, score: 5, remark: null }, url: "u" });
+test("rating message: green bar for positive, no comment line, name fallback", () => {
+  const msg = ratingMessage({ rating: { ...rating, score: 5, remark: null, contact_name: null }, url: "u" });
   assert.equal(msg.attachments[0].color, "#1F9D63");
-  assert.match(JSON.stringify(msg), /\*Assignee\*\\nAnn/);
-  assert.match(JSON.stringify(msg), /No comment/);
+  const text = msg.attachments[0].blocks[0].text.text;
+  assert.match(text, /• \*Assignee:\* Ann\n/);
+  assert.match(text, /• \*Customer:\* cy@example.com\n/);
+  assert.match(text, /• \*Rating:\* 🤩\n/);
+  assert.doesNotMatch(text, /Comment/);
 });
 
 test("streak message marks a new record", () => {
