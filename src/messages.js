@@ -65,9 +65,10 @@ function scoreLine(score) {
 // rating: row from the ratings table. change: { from } when the score changed.
 // A compact list, like Supportman's. Slack collapses a post with a side bar
 // after 5 lines, so the post stays at 5 lines at most: the rating emoji and a
-// rating change sit in the heading, the heading is the link, the team shares
-// the assignee line, and the comment comes last (a long comment folds, but its
-// start stays visible).
+// rating change sit in the heading, the heading is the link, and the team
+// shares the assignee line. Slack folds by how the post looks, and a long
+// topic or comment wraps, so the comment comes before the topic: when the post
+// folds, the comment's start stays visible and the topic folds first.
 function ratingMessage({ rating, url, assigneeSlackId, change }) {
   const s = SCORES[rating.score];
   const assignee = assigneeSlackId ? `<@${assigneeSlackId}>` : escape(rating.admin_name || "Unassigned");
@@ -86,12 +87,12 @@ function ratingMessage({ rating, url, assigneeSlackId, change }) {
     `• *Assignee:* ${assignee}${team}`,
     `• *Customer:* ${customer}`,
   ];
-  if (topic) lines.push(`• *Topic:* ${topic}`);
   if (rating.remark) {
     let comment = escape(rating.remark).replace(/\s*\n\s*/g, " ");
     if (comment.length > MAX_COMMENT) comment = `${comment.slice(0, MAX_COMMENT)}…`;
     lines.push(`• *Comment:* “${comment}”`);
   }
+  if (topic) lines.push(`• *Topic:* ${topic}`);
 
   return wrap(
     `${s.emoji} ${s.label} rating for ${rating.admin_name || "unassigned"}`,

@@ -14,15 +14,16 @@ list:
 😃 Conversation rated
 • Assignee: @Jane · Support Chat
 • Customer: Name (email)
-• Topic: Bug / Troubleshooting › Aliases · Solved for the customer 🎉
 • Comment: "…"
+• Topic: Bug / Troubleshooting › Aliases · Solved for the customer 🎉
 ```
 
 The heading links to the conversation. The assignee is an @mention when the
 email matches a Slack user, followed by the team inbox the conversation was
-closed in. The topic and comment lines show only when there is something in
-them. The post stays at 5 lines at most, because Slack folds longer posts
-behind "Show more".
+closed in. The comment and topic lines show only when there is something in
+them. The post has 5 lines at most, because Slack folds longer posts behind
+"Show more". A long comment or topic can still wrap and make Slack fold the
+post; the comment comes before the topic, so its start stays visible.
 
 - If the customer changes the rating within the 5 minutes, only the final
   rating is posted.
