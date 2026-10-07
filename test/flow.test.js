@@ -47,6 +47,7 @@ function setup() {
       return json({ ok: true, ts: String(state.nextTs++), channel: body.channel });
     }
     if (u.pathname === "/chat.update") return json({ ok: true });
+    if (u.pathname === "/views.publish") return json({ ok: true });
     if (u.pathname === "/reactions.add") return json({ ok: true });
     throw new Error(`Unexpected fetch ${url}`);
   };
@@ -405,4 +406,87 @@ test("/csat preview: every post, with sample data on an empty database and real 
   assert.match(await show("weekly"), /Weekly CSAT report/);
   for (const name of Object.keys(POSTS)) await show(name);
   assert.equal(state.calls.filter((c) => c.path === "/chat.postMessage").length, posted, "previews post nothing to the channel");
+});
+
+test("Home tab: overview for everyone, settings read-only for others, editable by admins", async () => {
+  const { app, state } = setup();
+  const views = () => state.calls.filter((c) => c.path === "/views.publish");
+  const last = () => JSON.stringify(views().at(-1).body);
+  const act = (user, action) => app.home.action({ type: "block_actions", user: { id: user }, actions: [action] });
+
+  state.rating = rating(5, Math.floor(Date.now() / 1000));
+  await app.ratings.processConversation("110");
+
+  await app.home.publish("UNOBODY");
+  assert.equal(views().at(-1).body.user_id, "UNOBODY");
+  assert.match(last(), /Streak: \d+ days\*/);
+  assert.match(last(), /This week/);
+  assert.match(last(), /By team inbox/);
+  assert.match(last(), /<#C1>/);
+  assert.match(last(), /"action_id":"preview_post"/);
+
+  // Others see Settings without dropdowns, and cannot change them.
+  await act("UNOBODY", { action_id: "home_tab_settings", value: "settings" });
+  assert.match(last(), /Only workspace admins and owners, and the app admins, can change these settings/);
+  assert.doesNotMatch(last(), /conversations_select/);
+  await act("UNOBODY", { action_id: "posting_channel", selected_conversation: "C7" });
+  assert.equal(app.getChannel(), "C1");
+
+  // A workspace admin changes the channel: confirmation in the new channel.
+  await act("UADMIN", { action_id: "home_tab_settings", value: "settings" });
+  assert.match(last(), /"type":"conversations_select","action_id":"posting_channel","initial_conversation":"C1"/);
+  await act("UADMIN", { action_id: "posting_channel", selected_conversation: "C7" });
+  assert.equal(app.getChannel(), "C7");
+  const confirm = state.calls.filter((c) => c.path === "/chat.postMessage").at(-1).body;
+  assert.equal(confirm.channel, "C7");
+  assert.match(confirm.text, /Changed by <@UADMIN>/);
+  assert.match(last(), /Posts go to <#C7> from now on/);
+
+  // A channel the bot is not in changes nothing.
+  await act("UADMIN", { action_id: "posting_channel", selected_conversation: "CNOBOT" });
+  assert.equal(app.getChannel(), "C7");
+  assert.match(last(), /I'm not in <#CNOBOT> yet/);
+
+  // An app admin added in the picker can change settings and use /csat here.
+  assert.match((await app.commands.handle({ text: "here", user_id: "UNEW", channel_id: "C8" })).text, /Only Slack workspace admins/);
+  await act("UADMIN", { action_id: "app_admins", selected_users: ["UNEW"] });
+  assert.deepEqual(app.access.appAdmins(), ["UNEW"]);
+  assert.match((await app.commands.handle({ text: "here", user_id: "UNEW", channel_id: "C8" })).text, /Done/);
+  await act("UNEW", { action_id: "app_admins", selected_users: ["UNEW", "UOTHER"] });
+  assert.deepEqual(app.access.appAdmins(), ["UNEW", "UOTHER"], "app admins can edit the list");
+
+  // A preview goes to the user's Messages tab.
+  await act("UNOBODY", { action_id: "preview_post", selected_option: { value: "weekly" } });
+  const preview = state.calls.filter((c) => c.path === "/chat.postMessage").at(-1).body;
+  assert.equal(preview.channel, "UNOBODY");
+  assert.match(JSON.stringify(preview), /Weekly CSAT report/);
+});
+
+test("Slack events and interactions routes: URL check, Home tab on open, signature checked", async () => {
+  const { app, config, state, log } = setup();
+  const server = createServer({ intercom: app.intercom, queue: app.queue, commands: app.commands, home: app.home, config, log });
+  await new Promise((r) => server.listen(0, "127.0.0.1", r));
+  const base = `http://127.0.0.1:${server.address().port}`;
+  const send = (path, body, type = "application/json", sigOk = true) => {
+    const ts = String(Math.floor(Date.now() / 1000));
+    const sig = "v0=" + crypto.createHmac("sha256", sigOk ? "slacksecret" : "wrong").update(`v0:${ts}:${body}`).digest("hex");
+    return realFetch(base + path, { method: "POST", body, headers: { "content-type": type, "x-slack-request-timestamp": ts, "x-slack-signature": sig } });
+  };
+
+  const check = await send("/slack/events", JSON.stringify({ type: "url_verification", challenge: "abc" }));
+  assert.deepEqual(await check.json(), { challenge: "abc" });
+  assert.equal((await send("/slack/events", JSON.stringify({ type: "url_verification", challenge: "x" }), "application/json", false)).status, 401);
+
+  const opened = await send("/slack/events", JSON.stringify({ type: "event_callback", event: { type: "app_home_opened", tab: "home", user: "UNOBODY" } }));
+  assert.equal(opened.status, 200);
+  await new Promise((r) => setTimeout(r, 50));
+  assert.equal(state.calls.filter((c) => c.path === "/views.publish").at(-1).body.user_id, "UNOBODY");
+
+  const payload = JSON.stringify({ type: "block_actions", user: { id: "UNOBODY" }, actions: [{ action_id: "home_tab_settings", value: "settings" }] });
+  const form = `payload=${encodeURIComponent(payload)}`;
+  assert.equal((await send("/slack/interactions", form, "application/x-www-form-urlencoded", false)).status, 401);
+  assert.equal((await send("/slack/interactions", form, "application/x-www-form-urlencoded")).status, 200);
+  await new Promise((r) => setTimeout(r, 50));
+  assert.match(JSON.stringify(state.calls.filter((c) => c.path === "/views.publish").at(-1).body), /Posting channel/);
+  server.close();
 });

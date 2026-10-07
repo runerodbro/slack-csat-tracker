@@ -102,7 +102,7 @@ function createPreviews({ db, ratings, jobs, intercom, slack, clock }) {
     },
     weekly: () => {
       const now = nowSeconds();
-      return jobs.weekReport(clock.epochAt(jobs.lastReportFriday(now), 14, 0), now).message;
+      return jobs.weekReport(clock.epochAt(jobs.lastReportFriday(now), 14, 0), now + 1).message;
     },
   };
 

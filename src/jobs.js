@@ -92,7 +92,7 @@ function createJobs({ db, intercom, slack, clock, ratings, queue, log = console 
         timeZone: "UTC",
       }) + ` ${String(p.hour).padStart(2, "0")}:${String(p.minute).padStart(2, "0")}`;
     };
-    return { stats, message: messages.weeklyMessage({ stats, from: label(start), to: label(end) }) };
+    return { stats, from: label(start), to: label(end), message: messages.weeklyMessage({ stats, from: label(start), to: label(end) }) };
   }
 
   async function weekly(friday = lastReportFriday()) {
