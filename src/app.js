@@ -13,6 +13,7 @@ const { CHANNEL_KEY } = require("./channels");
 const { createAccess } = require("./access");
 const { createHome } = require("./home");
 const { createPrefs } = require("./prefs");
+const { createCx } = require("./cx");
 const { createPreviews } = require("./previews");
 
 // channelOverride: post everything in this channel (test runs from the CLI).
@@ -28,12 +29,13 @@ function createApp(config, { db = open(), log = console, channelOverride = null 
   const prefs = createPrefs(settings);
   const ratings = createRatings({ db, intercom, slack, clock, config, prefs, log });
   const queue = createQueue({ db, handler: (id) => ratings.processConversation(id), log });
-  const jobs = createJobs({ db, intercom, slack, clock, ratings, queue, log });
+  const cx = createCx({ intercom, prefs, log });
+  const jobs = createJobs({ db, intercom, slack, clock, ratings, queue, prefs, cx, log });
   const previews = createPreviews({ db, ratings, jobs, intercom, slack, clock });
   const access = createAccess({ slack, settings, config, log });
   const commands = createCommands({ slack, settings, ratings, previews, access, getChannel, clock, config, log });
-  const home = createHome({ slack, settings, ratings, jobs, previews, access, prefs, clock, config, getChannel, log });
-  return { db, clock, intercom, slack, settings, prefs, ratings, queue, jobs, commands, home, access, getChannel };
+  const home = createHome({ slack, settings, ratings, jobs, previews, access, prefs, cx, intercom, clock, config, getChannel, log });
+  return { db, clock, intercom, slack, settings, prefs, cx, ratings, queue, jobs, commands, home, access, getChannel };
 }
 
 module.exports = { createApp };

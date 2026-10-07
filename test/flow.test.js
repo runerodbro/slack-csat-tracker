@@ -28,7 +28,13 @@ function setup() {
       if (u.pathname === "/admins") return json({ admins: [{ id: 7, name: "Ann", email: "ann@x.io" }] });
       if (u.pathname === "/teams") return json({ teams: [{ id: 11, name: "Billing" }, { id: 12, name: "Product A" }, { id: 13, name: "Support: Chat" }, { id: 99, name: "Support: Feedback" }] });
       if (u.pathname.startsWith("/contacts/")) return json({ name: "Cy", email: "cy@example.com" });
-      if (u.pathname === "/conversations/search") return json({ conversations: state.search ?? [] });
+      if (u.pathname === "/conversations/search") {
+        if (body.query?.operator === "AND") {
+          if (state.closedSearchFails) return { ok: false, status: 500, json: async () => ({}), text: async () => "boom" };
+          return json({ conversations: state.closed ?? [] });
+        }
+        return json({ conversations: state.search ?? [] });
+      }
       if (u.pathname.startsWith("/conversations/")) {
         const id = u.pathname.split("/").pop();
         const closer = state.closers?.[id];
@@ -577,4 +583,59 @@ test("Settings: 1–3 channel, switches and filters; the same channel is refused
 
   await act({ action_id: "negative_channel_clear" });
   assert.equal(app.prefs.negativeChannel(), null);
+});
+
+test("CX Score: teammate closes in the picked teams, a moved conversation counts under its closing team", async () => {
+  const { app, state } = setup();
+  const now = Math.floor(Date.now() / 1000);
+  const posts = () => state.calls.filter((c) => c.path === "/chat.postMessage");
+  const closed = (id, team, closer, cx) => ({
+    id, team_assignee_id: team, statistics: { last_closed_by_id: closer },
+    custom_attributes: cx == null ? {} : { "CX Score rating": cx },
+  });
+  state.closed = [
+    closed("c1", 13, 7, 5),
+    closed("c2", 13, 7, 3),
+    closed("c3", 13, 555, 1), // closed by a bot: left out
+    closed("c4", 99, 7, 2), // moved to the feedback team after the close
+    closed("c5", 13, 7, null), // not scored yet
+    closed("c6", 11, 7, 5), // Billing: not picked by default
+  ];
+  state.attributes = { c4: { "CX Score rating": 2 }, c6: { "CX Score rating": 5 } };
+  state.parts = { c4: [
+    { part_type: "assignment", created_at: now - 600, assigned_to: { type: "team", id: 13 } },
+    { part_type: "close", created_at: now - 300, author: { type: "admin" } },
+    { part_type: "assignment", created_at: now - 100, assigned_to: { type: "team", id: 99 } },
+  ] };
+
+  // Off by default: no CX Score in the report.
+  await app.jobs.weekly(app.jobs.lastReportFriday(now));
+  assert.doesNotMatch(JSON.stringify(posts().at(-1).body), /CX Score/);
+
+  app.prefs.set({ cxScore: true }, "UADMIN");
+  const stats = await app.jobs.weekly(app.jobs.lastReportFriday(now));
+  assert.deepEqual(stats.cx.teams.map((t) => [t.name, t.count]), [["Support: Chat", 3]]);
+  assert.equal(stats.cx.average.toFixed(2), "3.33");
+  assert.equal(stats.cx.notScored, 1);
+  const report = JSON.stringify(posts().at(-1).body);
+  assert.match(report, /CX Score\* 🧭\\n3 conversations · avg 3\.33 \/ 5\\n\*Support Chat\*: 3 · avg 3\.33/);
+  assert.match(report, /not scored yet: 1/);
+
+  // Picking Billing too in Settings adds it.
+  await app.home.action({ type: "block_actions", user: { id: "UADMIN" }, actions: [{ action_id: "home_tab_settings", value: "settings" }] });
+  const settingsView = JSON.stringify(state.calls.filter((c) => c.path === "/views.publish").at(-1).body);
+  assert.match(settingsView, /"action_id":"cx_teams"/);
+  assert.match(settingsView, /"initial_options":\[\{"value":"13"/);
+  await app.home.action({ type: "block_actions", user: { id: "UADMIN" }, actions: [{ action_id: "cx_teams", selected_options: [{ value: "11" }, { value: "13" }] }] });
+  const both = await app.cx.period(now - 86400, now + 1);
+  assert.deepEqual(both.teams.map((t) => [t.name, t.count]), [["Support: Chat", 3], ["Billing", 1]]);
+
+  // The Overview shows it with its age.
+  await app.home.action({ type: "block_actions", user: { id: "UADMIN" }, actions: [{ action_id: "home_tab_overview", value: "overview" }] });
+  assert.match(JSON.stringify(state.calls.filter((c) => c.path === "/views.publish").at(-1).body), /CX Score.*as of \d\d:\d\d/);
+
+  // A failed search does not stop the weekly report.
+  state.closedSearchFails = true;
+  await app.jobs.weekly(app.jobs.lastReportFriday(now));
+  assert.match(JSON.stringify(posts().at(-1).body), /CX Score\* 🧭\\nCould not be loaded this time/);
 });

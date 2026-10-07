@@ -18,6 +18,8 @@ const DEFAULTS = {
   scores: [1, 2, 3, 4, 5],
   positiveNeedsComment: false,
   negativeNeedsComment: false,
+  cxScore: false,
+  // cxTeams: team IDs for the CX Score; unset = the default team names (cx.js).
 };
 
 function createPrefs(settings) {

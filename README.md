@@ -62,6 +62,24 @@ of ratings with their average and % positive, and the same split by team
 inbox, sorted by number of ratings ("No team" last). Ratings without an agent
 count in the totals, not in the agent list.
 
+### CX Score
+
+Switched on in Home tab → Settings (off by default), the weekly report and
+the Overview also show Intercom's CX Score: the "CX Score rating" conversation
+attribute (1–5) that Intercom gives every conversation, rated or not.
+
+- It covers the conversations closed in the period in the team inboxes picked
+  in Settings. Before anyone picks, those are Support: Chat, Support: Email,
+  Horizon: Chat, Horizon: Email, Billing Support and Customer Success.
+- Only conversations a teammate closed count, as for CSAT. A conversation
+  moved to another team after the close, such as an internal follow-up team,
+  counts under the team it was closed in.
+- It shows the number of conversations, the average, and one line per team
+  inbox. Conversations without a score yet are counted separately as "not
+  scored yet".
+- The Overview reuses a result for up to 15 minutes and shows its time. If
+  Intercom can't be reached, the weekly report still goes out, with a note.
+
 ### Human ratings only
 
 A rating counts only when a human closed the conversation, because Intercom
@@ -126,6 +144,7 @@ Open the app in Slack to see its Home tab, with two buttons:
     celebration on a day the morning post is off comes with the next morning
     post. A post switched on again inside its window (see Schedule) still
     goes out that day. CLI commands always post.
+  - **CX Score**: the switch and the team inboxes it covers (see CX Score).
   - **Rating posts in the posting channel**: which scores get a post, and
     "only when the customer left a comment" for 4–5 and for 1–3. The filter
     looks at the rating as it is now: a rating that passes after a change,

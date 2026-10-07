@@ -38,15 +38,44 @@ function createIntercom({ token, clientSecret, apiUrl, appUrl, workspaceId }) {
   let teams = null;
   let teamsLoadedAt = 0;
   // Team inbox by ID, from the team list (cached like admins). null if unknown.
+  async function loadTeams() {
+    const data = await request("GET", "/teams");
+    teams = new Map((data.teams || []).map((t) => [String(t.id), t]));
+    teamsLoadedAt = Date.now();
+  }
+
   async function getTeam(id) {
     if (id == null) return null;
     const age = Date.now() - teamsLoadedAt;
-    if (!teams || age > ADMIN_CACHE_MS || (!teams.has(String(id)) && age > ADMIN_MISS_REFRESH_MS)) {
-      const data = await request("GET", "/teams");
-      teams = new Map((data.teams || []).map((t) => [String(t.id), t]));
-      teamsLoadedAt = Date.now();
-    }
+    if (!teams || age > ADMIN_CACHE_MS || (!teams.has(String(id)) && age > ADMIN_MISS_REFRESH_MS)) await loadTeams();
     return teams.get(String(id)) || null;
+  }
+
+  // All team inboxes, from the same cached list.
+  async function listTeams() {
+    if (!teams || Date.now() - teamsLoadedAt > ADMIN_CACHE_MS) await loadTeams();
+    return [...teams.values()];
+  }
+
+  // Yields closed conversations whose last close was in [start, end) (Unix seconds).
+  async function* searchClosed(start, end) {
+    let startingAfter;
+    do {
+      const data = await request("POST", "/conversations/search", {
+        query: {
+          operator: "AND",
+          value: [
+            { field: "statistics.last_close_at", operator: ">", value: start - 1 },
+            { field: "statistics.last_close_at", operator: "<", value: end },
+            { field: "state", operator: "=", value: "closed" },
+          ],
+        },
+        pagination: { per_page: 150, ...(startingAfter && { starting_after: startingAfter }) },
+      });
+      for (const conversation of data.conversations || []) yield conversation;
+      const next = data.pages?.next?.starting_after;
+      startingAfter = next && next !== startingAfter ? next : null;
+    } while (startingAfter);
   }
 
   let appId = workspaceId;
@@ -82,6 +111,8 @@ function createIntercom({ token, clientSecret, apiUrl, appUrl, workspaceId }) {
     getContact: (id) => request("GET", `/contacts/${encodeURIComponent(id)}`),
     getAdmin,
     getTeam,
+    listTeams,
+    searchClosed,
     conversationUrl,
     searchRated,
     verifySignature,
