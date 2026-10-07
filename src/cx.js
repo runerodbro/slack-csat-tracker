@@ -13,7 +13,11 @@
 // - Intercom only scores conversations with enough back-and-forth (at least
 //   two customer and two teammate or chatbot replies), so many short ones,
 //   often emails, never get a score. Each team shows how many of its
-//   conversations were scored, so the average is read against that.
+//   conversations were scored.
+// - The score is Intercom's own: the share of scored conversations rated 4 or
+//   5 ("% positive"). Unlike Intercom's "Teammate CX Score", which leaves out
+//   conversations Fin took part in, this counts every conversation a teammate
+//   closed, including Fin handovers (the same rule as CSAT).
 
 const { teamAtClose } = require("./closer");
 
@@ -37,8 +41,9 @@ function createCx({ intercom, prefs, log = console }) {
     return Number.isFinite(value) && value >= 1 && value <= 5 ? value : null;
   };
 
-  // Returns { count, total, average, teams: [{ name, count, total, average }] }:
-  // count = scored conversations, total = all counted conversations.
+  // Returns { count, total, positiveShare, teams: [{ name, count, total, positiveShare }] }:
+  // count = scored conversations, total = all counted conversations,
+  // positiveShare = share of the scored ones rated 4 or 5.
   async function period(start, end) {
     const selected = new Set(await teamIds());
     const byTeam = new Map();
@@ -58,12 +63,12 @@ function createCx({ intercom, prefs, log = console }) {
         if (!selected.has(team)) continue;
       }
 
-      const t = byTeam.get(team) || { id: team, count: 0, total: 0, sum: 0 };
+      const t = byTeam.get(team) || { id: team, count: 0, total: 0, positive: 0 };
       t.total++;
       const value = score(conv);
       if (value != null) {
         t.count++;
-        t.sum += value;
+        if (value >= 4) t.positive++;
       }
       byTeam.set(team, t);
     }
@@ -71,13 +76,13 @@ function createCx({ intercom, prefs, log = console }) {
     const teams = [];
     for (const t of byTeam.values()) {
       const info = await intercom.getTeam(t.id).catch(() => null);
-      teams.push({ name: info?.name || `Team ${t.id}`, count: t.count, total: t.total, average: t.count ? t.sum / t.count : 0 });
+      teams.push({ name: info?.name || `Team ${t.id}`, count: t.count, total: t.total, positiveShare: t.count ? t.positive / t.count : 0 });
     }
     teams.sort((a, b) => b.total - a.total || a.name.localeCompare(b.name));
     const count = teams.reduce((n, t) => n + t.count, 0);
     const total = teams.reduce((n, t) => n + t.total, 0);
-    const sum = [...byTeam.values()].reduce((n, t) => n + t.sum, 0);
-    return { count, total, average: count ? sum / count : 0, teams };
+    const positive = [...byTeam.values()].reduce((n, t) => n + t.positive, 0);
+    return { count, total, positiveShare: count ? positive / count : 0, teams };
   }
 
   // For the Overview: reuses a result up to 15 minutes old for the same period.

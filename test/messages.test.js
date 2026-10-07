@@ -77,13 +77,13 @@ test("rating message: never more than 5 lines, so Slack does not fold it", () =>
   assert.match(lines.at(-1), /^• \*Topic:\* /);
 });
 
-test("CX Score: a team average needs at least 5 scored conversations", () => {
+test("CX Score: % positive like Intercom; a team needs at least 5 scored conversations", () => {
   const { cxBlocks } = require("../src/messages");
   const text = cxBlocks({
-    count: 6, total: 70, average: 4.5,
-    teams: [{ name: "Support: Email", count: 5, total: 45, average: 4.2 }, { name: "Billing Support", count: 1, total: 25, average: 5 }],
+    count: 6, total: 70, positiveShare: 5 / 6,
+    teams: [{ name: "Support: Email", count: 5, total: 45, positiveShare: 0.8 }, { name: "Billing Support", count: 1, total: 25, positiveShare: 1 }],
   })[0].text.text;
-  assert.match(text, /\*Support Email\*: 5 of 45 scored · avg 4\.20/);
-  assert.match(text, /\*Billing Support\*: 1 of 25 scored · too few for an average/);
-  assert.match(text, /6 of 70 scored · avg 4\.50 \/ 5/);
+  assert.match(text, /\*Support Email\*: 80% positive · 5 of 45 scored/);
+  assert.match(text, /\*Billing Support\*: too few for a score · 1 of 25 scored/);
+  assert.match(text, /83% positive · 6 of 70 scored/);
 });

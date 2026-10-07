@@ -621,9 +621,9 @@ test("CX Score: teammate closes in the picked teams, a moved conversation counts
   app.prefs.set({ cxScore: true }, "UADMIN");
   const stats = await app.jobs.weekly(app.jobs.lastReportFriday(now));
   assert.deepEqual(stats.cx.teams.map((t) => [t.name, t.count, t.total]), [["Support: Chat", 3, 4]]);
-  assert.equal(stats.cx.average.toFixed(2), "3.33");
+  assert.equal(stats.cx.positiveShare.toFixed(2), "0.33"); // 5, 3, 2: one of three is 4–5
   const report = JSON.stringify(posts().at(-1).body);
-  assert.match(report, /CX Score\* 🧭\\n3 of 4 scored · avg 3\.33 \/ 5\\n\*Support Chat\*: 3 of 4 scored · too few for an average/);
+  assert.match(report, /CX Score\* 🧭\\n33% positive · 3 of 4 scored\\n\*Support Chat\*: too few for a score · 3 of 4 scored/);
   assert.doesNotMatch(report, /not scored/);
 
   // Picking Billing too in Settings adds it.
