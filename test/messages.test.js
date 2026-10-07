@@ -56,10 +56,10 @@ test("rating message: topic line as Category › Product Area · Outcome, leavin
   const text = (fields) => ratingMessage({ rating: { ...rating, ...fields }, url: "u" }).attachments[0].blocks[0].text.text;
   assert.match(
     text({ category: "Bug / Troubleshooting", product_area: "Aliases", outcome: "Solved for the customer 🎉" }),
-    /\n• \*Topic:\* Bug \/ Troubleshooting › Aliases · Solved for the customer 🎉\n• \*Comment:\*/,
+    /\n• \*Comment:\* .*\n• \*Topic:\* Bug \/ Troubleshooting › Aliases · Solved for the customer 🎉$/,
   );
-  assert.match(text({ category: "Billing", outcome: "Refund <given>" }), /• \*Topic:\* Billing · Refund &lt;given&gt;\n/);
-  assert.match(text({ product_area: "PDF Processing" }), /• \*Topic:\* PDF Processing\n/);
+  assert.match(text({ category: "Billing", outcome: "Refund <given>" }), /• \*Topic:\* Billing · Refund &lt;given&gt;$/);
+  assert.match(text({ product_area: "PDF Processing" }), /• \*Topic:\* PDF Processing$/);
   assert.doesNotMatch(text({}), /Topic/);
 });
 
@@ -73,5 +73,6 @@ test("rating message: never more than 5 lines, so Slack does not fold it", () =>
   });
   const lines = full.attachments[0].blocks[0].text.text.split("\n");
   assert.equal(lines.length, 5);
-  assert.match(lines.at(-1), /^• \*Comment:\* “Line one line two”$/);
+  assert.match(lines.at(-2), /^• \*Comment:\* “Line one line two”$/, "comment before topic, so it stays visible when Slack folds");
+  assert.match(lines.at(-1), /^• \*Topic:\* /);
 });
