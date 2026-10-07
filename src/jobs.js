@@ -79,9 +79,8 @@ function createJobs({ db, intercom, slack, clock, ratings, queue, log = console 
     return friday;
   }
 
-  async function weekly(friday = lastReportFriday()) {
-    const start = clock.epochAt(addDays(friday, -7), 14, 0);
-    const end = clock.epochAt(friday, 14, 0);
+  // The weekly report message for start to end, and its numbers.
+  function weekReport(start, end) {
     const stats = weeklyStats(weekRows.all(start, end));
     stats.bots = weekBotRows.get(start, end);
     const label = (epoch) => {
@@ -93,7 +92,12 @@ function createJobs({ db, intercom, slack, clock, ratings, queue, log = console 
         timeZone: "UTC",
       }) + ` ${String(p.hour).padStart(2, "0")}:${String(p.minute).padStart(2, "0")}`;
     };
-    await slack.post(messages.weeklyMessage({ stats, from: label(start), to: label(end) }));
+    return { stats, message: messages.weeklyMessage({ stats, from: label(start), to: label(end) }) };
+  }
+
+  async function weekly(friday = lastReportFriday()) {
+    const { stats, message } = weekReport(clock.epochAt(addDays(friday, -7), 14, 0), clock.epochAt(friday, 14, 0));
+    await slack.post(message);
     return stats;
   }
 
@@ -168,7 +172,7 @@ function createJobs({ db, intercom, slack, clock, ratings, queue, log = console 
     return { ...counts, teams };
   }
 
-  return { morning, weekly, reconcile, backfill, classify, lastReportFriday };
+  return { morning, weekly, weekReport, streakStats, reconcile, backfill, classify, lastReportFriday };
 }
 
 module.exports = { createJobs };

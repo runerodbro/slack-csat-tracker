@@ -38,4 +38,4 @@ function celebrationFor({ streak, celebrated }) {
   return null;
 }
 
-module.exports = { celebrationFor, highestMilestone };
+module.exports = { celebrationFor, highestMilestone, milestoneTitle };
