@@ -57,30 +57,29 @@ function scoreLine(score) {
 }
 
 // rating: row from the ratings table. change: { from } when the score changed.
-// A compact list, like Supportman's. The comment line only shows when there is one.
+// A compact list, like Supportman's. Slack collapses a post with a side bar
+// after 5 lines, so the post stays at 5 lines at most: the rating emoji and a
+// rating change sit in the heading, the heading is the link, and the comment
+// comes last (a long comment folds, but its start stays visible).
 function ratingMessage({ rating, url, assigneeSlackId, change }) {
   const s = SCORES[rating.score];
   const assignee = assigneeSlackId ? `<@${assigneeSlackId}>` : escape(rating.admin_name || "Unassigned");
   const name = rating.contact_name ? `_${escape(rating.contact_name)}_` : "";
   const email = rating.contact_email ? escape(rating.contact_email) : "";
   const customer = name && email ? `${name} (${email})` : name || email || "Unknown";
+  const changed = change && change.from !== rating.score ? ` · changed from ${SCORES[change.from].emoji}` : "";
 
   const lines = [
-    "*Conversation rated:*",
+    `${s.emoji} *<${url}|Conversation rated>*${changed}`,
     `• *Assignee:* ${assignee}`,
     `• *Customer:* ${customer}`,
   ];
   if (rating.team_name) lines.push(`• *Team:* ${escape(rating.team_name)}`);
-  lines.push(`• *Rating:* ${s.emoji}`);
   if (rating.remark) {
     let comment = escape(rating.remark).replace(/\s*\n\s*/g, " ");
     if (comment.length > MAX_COMMENT) comment = `${comment.slice(0, MAX_COMMENT)}…`;
     lines.push(`• *Comment:* “${comment}”`);
   }
-  if (change && change.from !== rating.score) {
-    lines.push(`• *Changed:* ${SCORES[change.from].emoji} → ${s.emoji}`);
-  }
-  lines.push(`<${url}|View conversation>`);
 
   return wrap(
     `${s.emoji} ${s.label} rating for ${rating.admin_name || "unassigned"}`,

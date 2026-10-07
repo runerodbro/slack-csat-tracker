@@ -287,7 +287,7 @@ test("team inbox: shown on the rating post, split in the weekly report, filled i
   state.rating = rating(5, now);
   await app.ratings.processConversation("70");
   const post = state.calls.filter((c) => c.path === "/chat.postMessage").at(-1).body;
-  assert.match(post.attachments[0].blocks[0].text.text, /• \*Team:\* Billing\n/);
+  assert.match(post.attachments[0].blocks[0].text.text, /• \*Team:\* Billing$/);
 
   state.rating = rating(4, now);
   await app.ratings.processConversation("71");

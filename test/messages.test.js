@@ -13,8 +13,8 @@ test("rating message: compact list, escaping, red bar for negative, change shown
   const text = msg.attachments[0].blocks[0].text.text;
   assert.equal(
     text,
-    "*Conversation rated:*\n• *Assignee:* <@U1>\n• *Customer:* _Cy_ (cy@example.com)\n• *Rating:* 🙁\n" +
-      "• *Comment:* “Slow &lt;b&gt;reply&lt;/b&gt; &amp; rude”\n• *Changed:* 🤩 → 🙁\n<https://x/1|View conversation>",
+    "🙁 *<https://x/1|Conversation rated>* · changed from 🤩\n• *Assignee:* <@U1>\n• *Customer:* _Cy_ (cy@example.com)\n" +
+      "• *Comment:* “Slow &lt;b&gt;reply&lt;/b&gt; &amp; rude”",
   );
 });
 
@@ -23,8 +23,8 @@ test("rating message: green bar for positive, no comment line, name fallback", (
   assert.equal(msg.attachments[0].color, "#1F9D63");
   const text = msg.attachments[0].blocks[0].text.text;
   assert.match(text, /• \*Assignee:\* Ann\n/);
-  assert.match(text, /• \*Customer:\* cy@example.com\n/);
-  assert.match(text, /• \*Rating:\* 🤩\n/);
+  assert.match(text, /• \*Customer:\* cy@example.com$/);
+  assert.match(text, /^🤩 \*<u\|Conversation rated>\*\n/);
   assert.doesNotMatch(text, /Comment/);
 });
 
@@ -47,7 +47,17 @@ test("streak message: positive wording, start date and record range start the da
 
 test("rating message: team line only when the team is known", () => {
   const withTeam = ratingMessage({ rating: { ...rating, score: 5, team_name: "Billing <EU>" }, url: "u" });
-  assert.match(withTeam.attachments[0].blocks[0].text.text, /• \*Customer:\* .*\n• \*Team:\* Billing &lt;EU&gt;\n• \*Rating:\*/);
+  assert.match(withTeam.attachments[0].blocks[0].text.text, /• \*Customer:\* .*\n• \*Team:\* Billing &lt;EU&gt;\n• \*Comment:\*/);
   const without = ratingMessage({ rating: { ...rating, score: 5 }, url: "u" });
   assert.doesNotMatch(without.attachments[0].blocks[0].text.text, /Team/);
+});
+
+test("rating message: never more than 5 lines, so Slack does not fold it", () => {
+  const full = ratingMessage({
+    rating: { ...rating, team_name: "Support: Chat", remark: "Line one\nline two" },
+    url: "u", assigneeSlackId: "U1", change: { from: 5 },
+  });
+  const lines = full.attachments[0].blocks[0].text.text.split("\n");
+  assert.equal(lines.length, 5);
+  assert.match(lines.at(-1), /^• \*Comment:\* “Line one line two”$/);
 });

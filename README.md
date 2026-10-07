@@ -8,9 +8,10 @@ positive ratings, celebrates records, and sends a weekly report.
 ### Rating posts
 
 Each rating (1–5) is posted to Slack 5 minutes after it arrives, as a compact
-list: assignee (@mention when the email matches a Slack user), customer, the
-team inbox the conversation is in, rating emoji, the comment if there is one,
-and a link to the conversation.
+list: a heading with the rating emoji that links to the conversation, then the
+assignee (@mention when the email matches a Slack user), customer, the team
+inbox the conversation is in, and the comment if there is one. The post stays
+at 5 lines at most, because Slack folds longer posts behind "Show more".
 
 - If the customer changes the rating within the 5 minutes, only the final
   rating is posted.
