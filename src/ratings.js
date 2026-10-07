@@ -7,7 +7,7 @@
 const { nowSeconds } = require("./time");
 const { isNegative, computeStreak, breakInfo } = require("./streak");
 const messages = require("./messages");
-const { closedBy, COUNTS_SQL } = require("./closer");
+const { closedBy, teamAtClose, COUNTS_SQL } = require("./closer");
 
 function createRatings({ db, intercom, slack, clock, config, log = console }) {
   const q = {
@@ -67,9 +67,11 @@ function createRatings({ db, intercom, slack, clock, config, log = console }) {
     }
   }
 
-  // The team inbox the conversation is in. A failed team lookup keeps the ID.
+  // The team inbox the conversation was closed in (closer.js). Without a team
+  // assignment in its history, the conversation's current team. A failed name
+  // lookup keeps the ID.
   async function teamFields(conv) {
-    const id = conv.team_assignee_id;
+    const id = teamAtClose(conv) ?? conv.team_assignee_id;
     if (id == null || id === "" || Number(id) === 0) return { team_id: "none", team_name: null };
     try {
       const team = await intercom.getTeam(id);

@@ -26,14 +26,15 @@ function setup() {
     const json = (data) => ({ ok: true, status: 200, json: async () => data, text: async () => "" });
     if (u.host === "intercom.test") {
       if (u.pathname === "/admins") return json({ admins: [{ id: 7, name: "Ann", email: "ann@x.io" }] });
-      if (u.pathname === "/teams") return json({ teams: [{ id: 11, name: "Billing" }, { id: 12, name: "Product A" }] });
+      if (u.pathname === "/teams") return json({ teams: [{ id: 11, name: "Billing" }, { id: 12, name: "Product A" }, { id: 13, name: "Support: Chat" }, { id: 99, name: "Support: Feedback" }] });
       if (u.pathname.startsWith("/contacts/")) return json({ name: "Cy", email: "cy@example.com" });
       if (u.pathname.startsWith("/conversations/")) {
         const id = u.pathname.split("/").pop();
-        const parts = state.closers?.[id];
+        const closer = state.closers?.[id];
+        const parts = state.parts?.[id] ?? (closer && [{ part_type: "close", created_at: 1, author: { type: closer } }]);
         return json({
           id, conversation_rating: state.rating, team_assignee_id: state.teams?.[id] ?? null,
-          ...(parts && { conversation_parts: { conversation_parts: [{ part_type: "close", created_at: 1, author: { type: parts } }] } }),
+          ...(parts && { conversation_parts: { conversation_parts: parts } }),
         });
       }
     }
@@ -310,4 +311,27 @@ test("team inbox: shown on the rating post, split in the weekly report, filled i
   const result = await app.jobs.classify();
   assert.deepEqual(result.teams, { Billing: 1, "Product A": 2, "No team": 1 });
   assert.equal(app.db.prepare("SELECT team_name FROM ratings WHERE conversation_id = '70'").get().team_name, "Billing");
+});
+
+test("team inbox: a rating moved to the feedback team after the close keeps its own team; colons left out in Slack", async () => {
+  const { app, state } = setup();
+  const now = Math.floor(Date.now() / 1000);
+  // Handled and closed in Support: Chat, then moved to Support: Feedback by a workflow.
+  state.teams = { "80": 99 };
+  state.parts = { "80": [
+    { part_type: "assignment", created_at: now - 600, assigned_to: { type: "team", id: 13 } },
+    { part_type: "close", created_at: now - 120, author: { type: "admin" } },
+    { part_type: "assignment", created_at: now + 60, assigned_to: { type: "team", id: 99 } },
+  ] };
+  state.rating = rating(2, now);
+  await app.ratings.processConversation("80");
+  const post = state.calls.filter((c) => c.path === "/chat.postMessage").find((c) => c.body.attachments?.[0]?.blocks?.[0]?.text?.text?.includes("Team"));
+  assert.match(post.body.attachments[0].blocks[0].text.text, /• \*Team:\* Support Chat/);
+  assert.equal(app.db.prepare("SELECT team_name FROM ratings WHERE conversation_id = '80'").get().team_name, "Support: Chat");
+
+  // Rows saved with the old rule get the right team from --recheck-teams.
+  app.db.prepare("UPDATE ratings SET team_id = '99', team_name = 'Support: Feedback'").run();
+  const result = await app.jobs.classify({ recheckTeams: true });
+  assert.deepEqual(result.teams, { "Support: Chat": 1 });
+  assert.equal(app.db.prepare("SELECT team_name FROM ratings WHERE conversation_id = '80'").get().team_name, "Support: Chat");
 });

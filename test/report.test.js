@@ -45,3 +45,8 @@ test("last report Friday", () => {
   assert.equal(jobs.lastReportFriday(clock.epochAt("2026-10-02", 14, 0)), "2026-10-02"); // Friday 14:00
   assert.equal(jobs.lastReportFriday(clock.epochAt("2026-10-04", 9, 0)), "2026-10-02"); // Sunday
 });
+
+test("weekly report: team names without colons", () => {
+  const stats = weeklyStats([{ score: 5, admin_id: "1", admin_name: "Ann", team_id: "13", team_name: "Support: Chat" }]);
+  assert.match(JSON.stringify(weeklyMessage({ stats, from: "a", to: "b" })), /\*Support Chat\*: 1 rating/);
+});

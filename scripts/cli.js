@@ -1,6 +1,7 @@
 // Run a job by hand. Examples:
 //   node --env-file=.env scripts/cli.js backfill 365   import history, no Slack posts
 //   node --env-file=.env scripts/cli.js classify       check who closed each saved rating
+//   node --env-file=.env scripts/cli.js classify --recheck-teams   work out every rating's team again
 //   node --env-file=.env scripts/cli.js streak         print the streak, no Slack post
 //   node --env-file=.env scripts/cli.js morning        post the streak message now
 //   node --env-file=.env scripts/cli.js weekly [YYYY-MM-DD]   post the weekly report now
@@ -50,6 +51,7 @@ async function main() {
     case "classify": {
       console.log("Checking who closed each saved rating and its team inbox...");
       const counts = await app.jobs.classify({
+        recheckTeams: argv.includes("--recheck-teams"),
         onProgress: (c) => console.log(`  ${c.checked}/${c.total} checked: ${c.human} human, ${c.bot} bot, ${c.unknown} unknown`),
       });
       console.log(counts);
