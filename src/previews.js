@@ -100,9 +100,9 @@ function createPreviews({ db, ratings, jobs, intercom, slack, clock }) {
       const { row, info } = breakData();
       return messages.restoredMessage({ info, rating: { ...row, score: 4 }, url: await urlFor(row), stillBroken: false });
     },
-    weekly: () => {
+    weekly: async () => {
       const now = nowSeconds();
-      return jobs.weekReport(clock.epochAt(jobs.lastReportFriday(now), 14, 0), now + 1).message;
+      return (await jobs.weekReport(clock.epochAt(jobs.lastReportFriday(now), 14, 0), now + 1)).message;
     },
   };
 

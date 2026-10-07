@@ -11,7 +11,7 @@ const RECONCILE_DAYS = 3;
 // A missed rating older than this is saved without a Slack post.
 const LATE_POST_LIMIT = 6 * 60 * 60;
 
-function createJobs({ db, intercom, slack, clock, ratings, queue, log = console }) {
+function createJobs({ db, intercom, slack, clock, ratings, queue, prefs, cx, log = console }) {
   const weekRows = db.prepare(
     `SELECT score, admin_id, admin_name, team_id, team_name FROM ratings WHERE rated_at >= ? AND rated_at < ? AND ${COUNTS_SQL}`,
   );
@@ -79,10 +79,13 @@ function createJobs({ db, intercom, slack, clock, ratings, queue, log = console 
     return friday;
   }
 
-  // The weekly report message for start to end, and its numbers.
-  function weekReport(start, end) {
+  // The weekly report message for start to end, and its numbers. The CX Score
+  // is added when it is switched on in Settings.
+  // withCx: false leaves it out (the Overview adds its own cached one).
+  async function weekReport(start, end, { withCx = true } = {}) {
     const stats = weeklyStats(weekRows.all(start, end));
     stats.bots = weekBotRows.get(start, end);
+    if (withCx && prefs?.get().cxScore && cx) stats.cx = await cx.period(start, end);
     const label = (epoch) => {
       const p = clock.parts(epoch);
       return new Date(Date.UTC(p.year, p.month - 1, p.day)).toLocaleDateString("en-GB", {
@@ -96,7 +99,7 @@ function createJobs({ db, intercom, slack, clock, ratings, queue, log = console 
   }
 
   async function weekly(friday = lastReportFriday()) {
-    const { stats, message } = weekReport(clock.epochAt(addDays(friday, -7), 14, 0), clock.epochAt(friday, 14, 0));
+    const { stats, message } = await weekReport(clock.epochAt(addDays(friday, -7), 14, 0), clock.epochAt(friday, 14, 0));
     await slack.post(message);
     return stats;
   }

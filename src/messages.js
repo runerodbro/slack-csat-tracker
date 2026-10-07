@@ -228,6 +228,24 @@ function pct(share) {
   return `${Math.round(share * 100)}%`;
 }
 
+// cx: result of cx.period(). Intercom's CX Score for the conversations closed in
+// the period, rated or not. asOf: a label for a cached result (Overview).
+function cxBlocks(cx, asOf = null) {
+  const title = "*CX Score* 🧭";
+  if (cx.error) return [{ type: "section", text: { type: "mrkdwn", text: `${title}\nCould not be loaded this time.` } }];
+  // "12 of 61 scored": Intercom only scores conversations with enough back-and-forth.
+  const scored = (t) => `${t.count} of ${t.total} scored${t.count ? ` · avg ${t.average.toFixed(2)}` : ""}`;
+  const lines = cx.total
+    ? [`${scored(cx)}${cx.count ? " / 5" : ""}`, ...cx.teams.map((t) => `*${escape(teamLabel(t.name))}*: ${scored(t)}`)]
+    : ["No conversations closed yet."];
+  const notes = ["Conversations closed by a teammate in the picked team inboxes, rated or not"];
+  if (asOf) notes.push(`as of ${asOf}`);
+  return [
+    { type: "section", text: { type: "mrkdwn", text: `${title}\n${lines.join("\n")}` } },
+    { type: "context", elements: [{ type: "mrkdwn", text: notes.join(" · ") }] },
+  ];
+}
+
 // stats: result of weeklyStats(). from/to: labels for the period.
 function weeklyMessage({ stats, from, to }) {
   const blocks = [
@@ -236,6 +254,7 @@ function weeklyMessage({ stats, from, to }) {
   ];
   if (!stats.total) {
     blocks.push({ type: "section", text: { type: "mrkdwn", text: "No ratings this week." } });
+    if (stats.cx) blocks.push(...cxBlocks(stats.cx));
     return { text: "Weekly CSAT report: no ratings this week", blocks };
   }
 
@@ -274,6 +293,8 @@ function weeklyMessage({ stats, from, to }) {
     blocks.push({ type: "section", text: { type: "mrkdwn", text: `*By team inbox*\n${teams}` } });
   }
 
+  if (stats.cx) blocks.push(...cxBlocks(stats.cx));
+
   // Plain blocks, not an attachment: Slack collapses long attachments behind "Show more".
   if (stats.bots?.count) {
     blocks.push({
@@ -287,4 +308,4 @@ function weeklyMessage({ stats, from, to }) {
   return { text: `Weekly CSAT report: ${stats.total} ratings, average ${stats.average.toFixed(2)}`, blocks };
 }
 
-module.exports = { ratingMessage, streakMessage, breakMessage, restoredMessage, weeklyMessage, escape, teamLabel, recordText, sinceText, pct, SCORES };
+module.exports = { ratingMessage, streakMessage, breakMessage, restoredMessage, weeklyMessage, cxBlocks, escape, teamLabel, recordText, sinceText, pct, SCORES };

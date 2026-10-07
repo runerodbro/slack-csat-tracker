@@ -11,7 +11,8 @@ const { nowSeconds, formatDate } = require("./time");
 const { POSTS } = require("./previews");
 const { CHANNEL_KEY, NEGATIVE_CHANNEL_KEY, changeChannel } = require("./channels");
 
-const { escape, teamLabel, recordText, sinceText, pct, SCORES } = messages;
+const { escape, teamLabel, recordText, sinceText, pct, SCORES, cxBlocks } = messages;
+const { DEFAULT_TEAM_NAMES } = require("./cx");
 
 const text = (t) => ({ type: "mrkdwn", text: t });
 const section = (t, extra = {}) => ({ type: "section", text: text(t), ...extra });
@@ -32,7 +33,7 @@ const COMMENT_FILTERS = [
 
 const SETTING_ACTIONS = [
   "posting_channel", "negative_channel", "negative_channel_clear", "app_admins",
-  "post_switches", "rating_scores", "comment_filters",
+  "post_switches", "rating_scores", "comment_filters", "cx_switch", "cx_teams",
 ];
 
 const option = (value, label) => ({ value: String(value), text: { type: "plain_text", text: label } });
@@ -44,7 +45,7 @@ function checkboxes(actionId, options, selected) {
   return { type: "checkboxes", action_id: actionId, options: opts, ...(initial.length && { initial_options: initial }) };
 }
 
-function createHome({ slack, settings, ratings, jobs, previews, access, prefs, clock, config, getChannel, log = console }) {
+function createHome({ slack, settings, ratings, jobs, previews, access, prefs, cx, intercom, clock, config, getChannel, log = console }) {
   const tabs = new Map(); // user ID → "overview" | "settings"
   const notices = new Map(); // user ID → a line to show once in Settings
 
@@ -59,9 +60,10 @@ function createHome({ slack, settings, ratings, jobs, previews, access, prefs, c
     return { type: "actions", elements: [button("overview", "Overview"), button("settings", "Settings")] };
   }
 
-  function weekBlocks() {
+  async function weekBlocks() {
     const now = nowSeconds();
-    const { stats, from } = jobs.weekReport(clock.epochAt(jobs.lastReportFriday(now), 14, 0), now + 1);
+    const start = clock.epochAt(jobs.lastReportFriday(now), 14, 0);
+    const { stats, from } = await jobs.weekReport(start, now + 1, { withCx: false });
     const blocks = [section("*This week*"), context(`Since ${from}, goes into Friday's report`)];
     if (!stats.total) {
       blocks.push(section("No ratings yet this week."));
@@ -86,10 +88,16 @@ function createHome({ slack, settings, ratings, jobs, previews, access, prefs, c
     if (stats.bots?.count) {
       blocks.push(context(`🤖 Closed by Fin or a bot, not counted: ${stats.bots.count}`));
     }
+    if (prefs.get().cxScore) {
+      const result = await cx.cachedPeriod(start, now + 1, now);
+      const at = result.at ? clock.parts(result.at) : null;
+      const asOf = at ? `${String(at.hour).padStart(2, "0")}:${String(at.minute).padStart(2, "0")}` : null;
+      blocks.push(...cxBlocks(result, asOf));
+    }
     return blocks;
   }
 
-  function overview() {
+  async function overview() {
     const s = ratings.currentStreak();
     const p = prefs.get();
     const headline = s.isNewRecord
@@ -102,7 +110,7 @@ function createHome({ slack, settings, ratings, jobs, previews, access, prefs, c
       section(headline),
       { type: "section", fields },
       divider,
-      ...weekBlocks(),
+      ...(await weekBlocks()),
       divider,
       {
         type: "section",
@@ -134,7 +142,7 @@ function createHome({ slack, settings, ratings, jobs, previews, access, prefs, c
     return row?.updated_by ? `Changed by <@${row.updated_by}> on ${formatDate(clock.localDate(row.updated_at))}` : null;
   }
 
-  function settingsBlocks(editable, userId) {
+  async function settingsBlocks(editable, userId) {
     const channelRow = settings.get(CHANNEL_KEY);
     const admins = access.appAdmins();
     const envAdmins = config.slack.adminUserIds;
@@ -215,6 +223,8 @@ function createHome({ slack, settings, ratings, jobs, previews, access, prefs, c
           COMMENT_FILTERS.filter(([key]) => p[key]).map(([, label]) => label).join("\n"),
       ));
     }
+    blocks.push(divider);
+    blocks.push(...(await cxSettings(editable, p)));
     if (prefs.row()?.updated_by) blocks.push(context(changedBy(prefs.row())));
     blocks.push(divider);
 
@@ -238,9 +248,42 @@ function createHome({ slack, settings, ratings, jobs, previews, access, prefs, c
     return blocks;
   }
 
+  // CX Score: the switch and the team inboxes it covers.
+  async function cxSettings(editable, p) {
+    const intro = "*CX Score*\nIntercom's CX Score in the weekly report and the Overview, for all conversations closed by a teammate in these team inboxes.";
+    let teams = [];
+    try {
+      teams = await intercom.listTeams();
+    } catch (err) {
+      log.warn(`Teams: ${err.message}`);
+    }
+    const picked = await cx.teamIds().catch(() => []);
+    const names = teams.filter((t) => picked.includes(String(t.id))).map((t) => teamLabel(t.name));
+    if (!editable) {
+      return [section(`${intro}\n${p.cxScore ? "On" : "Off"} · ${names.join(", ") || DEFAULT_TEAM_NAMES.map(teamLabel).join(", ")}`)];
+    }
+    const blocks = [section(intro, { accessory: checkboxes("cx_switch", [["cxScore", "Show the CX Score"]], p.cxScore ? ["cxScore"] : []) })];
+    if (teams.length) {
+      const options = teams.slice(0, 100).map((t) => option(t.id, teamLabel(t.name).slice(0, 75)));
+      const initial = options.filter((o) => picked.includes(o.value));
+      blocks.push(section("Team inboxes", {
+        accessory: {
+          type: "multi_static_select",
+          action_id: "cx_teams",
+          placeholder: { type: "plain_text", text: "Pick team inboxes" },
+          options,
+          ...(initial.length && { initial_options: initial }),
+        },
+      }));
+    } else {
+      blocks.push(context("Couldn't load the team inboxes from Intercom. Try again later."));
+    }
+    return blocks;
+  }
+
   async function publish(userId) {
     const tab = tabs.get(userId) || "overview";
-    const body = tab === "settings" ? settingsBlocks(await access.canEdit(userId), userId) : overview();
+    const body = tab === "settings" ? await settingsBlocks(await access.canEdit(userId), userId) : await overview();
     await slack.publishView(userId, { type: "home", blocks: [tabButtons(tab), divider, ...body] });
   }
 
@@ -282,6 +325,12 @@ function createHome({ slack, settings, ratings, jobs, previews, access, prefs, c
         prefs.set(Object.fromEntries(SWITCHES.map(([key]) => [key, picked.includes(key)])), userId);
       } else if (act.action_id === "rating_scores") {
         prefs.set({ scores: picked.map(Number).sort() }, userId);
+      } else if (act.action_id === "cx_switch") {
+        prefs.set({ cxScore: picked.includes("cxScore") }, userId);
+        cx.invalidate();
+      } else if (act.action_id === "cx_teams") {
+        prefs.set({ cxTeams: picked }, userId);
+        cx.invalidate();
       } else if (act.action_id === "comment_filters") {
         prefs.set(Object.fromEntries(COMMENT_FILTERS.map(([key]) => [key, picked.includes(key)])), userId);
       } else if (act.action_id === "app_admins") {
