@@ -644,3 +644,36 @@ test("CX Score: teammate closes in the picked teams, a moved conversation counts
   await app.jobs.weekly(app.jobs.lastReportFriday(now));
   assert.match(JSON.stringify(posts().at(-1).body), /CX Score\* 🧭\\nCould not be loaded this time/);
 });
+
+test("Overview: drawn at once with 'Loading…', then again with the CX Score; a failure doesn't loop", async () => {
+  const { app, state } = setup();
+  const views = () => state.calls.filter((c) => c.path === "/views.publish").map((c) => JSON.stringify(c.body));
+  const searches = () => state.calls.filter((c) => c.path === "/conversations/search" && c.body.query?.operator === "AND").length;
+  app.prefs.set({ cxScore: true }, "UADMIN");
+  state.closed = [{ id: "d1", team_assignee_id: 13, statistics: { last_closed_by_id: 7 }, custom_attributes: { "CX Score rating": 5 } }];
+
+  await app.home.publish("UNOBODY");
+  let v = views();
+  assert.equal(v.length, 2);
+  assert.match(v[0], /CX Score\* 🧭\\nLoading…/);
+  assert.match(v[1], /100% positive · 1 of 1 scored/);
+
+  // Within 15 minutes: no second load, drawn once.
+  await app.home.publish("UNOBODY");
+  assert.equal(views().length, 3);
+  assert.equal(searches(), 1);
+
+  // Two people at once share one load.
+  app.cx.invalidate();
+  await Promise.all([app.home.publish("UA"), app.home.publish("UB")]);
+  assert.equal(searches(), 2);
+
+  // A failure: 'Could not be loaded', drawn twice, no loop.
+  app.cx.invalidate();
+  state.closedSearchFails = true;
+  const before = views().length;
+  await app.home.publish("UNOBODY");
+  v = views().slice(before);
+  assert.equal(v.length, 2);
+  assert.match(v[1], /Could not be loaded this time/);
+});

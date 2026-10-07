@@ -26,6 +26,23 @@ const CX_ATTRIBUTE = "CX Score rating";
 // of the team picker in Settings.
 const DEFAULT_TEAM_NAMES = ["Support: Chat", "Support: Email", "Horizon: Chat", "Horizon: Email", "Billing Support", "Customer Success"];
 const OVERVIEW_CACHE_SECONDS = 15 * 60;
+// Conversations loaded from Intercom at the same time. Well inside Intercom's
+// rate limit, and about 8 times faster than one by one.
+const PARALLEL = 8;
+
+// Runs fn on every item, at most `limit` at a time; keeps the order.
+async function mapLimit(items, limit, fn) {
+  const results = new Array(items.length);
+  let next = 0;
+  const worker = async () => {
+    while (next < items.length) {
+      const i = next++;
+      results[i] = await fn(items[i]);
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker));
+  return results;
+}
 
 function createCx({ intercom, prefs, log = console }) {
   // The picked team IDs; before anyone picks, the default team names.
@@ -48,21 +65,29 @@ function createCx({ intercom, prefs, log = console }) {
     const selected = new Set(await teamIds());
     const byTeam = new Map();
 
-    for await (let conv of intercom.searchClosed(start, end)) {
+    // Closes by a teammate (the admin list is cached, so this is quick).
+    const closedByTeammate = [];
+    for await (const conv of intercom.searchClosed(start, end)) {
       const closer = conv.statistics?.last_closed_by_id;
       if (closer != null) {
         const admin = await intercom.getAdmin(closer);
         if (!admin || admin.has_inbox_seat === false) continue; // Fin, a bot or a workflow
       }
+      closedByTeammate.push(conv);
+    }
 
-      let team = conv.team_assignee_id == null ? null : String(conv.team_assignee_id);
-      if (!selected.has(team)) {
-        // Moved after the close? Look at the team it was closed in.
-        conv = await intercom.getConversation(conv.id);
-        team = teamAtClose(conv) ?? null;
-        if (!selected.has(team)) continue;
-      }
+    // A conversation now outside the picked teams may have been moved after
+    // the close: load it to find the team it was closed in. These loads run
+    // in parallel, as they are most of the time this takes.
+    const counted = await mapLimit(closedByTeammate, PARALLEL, async (conv) => {
+      const team = conv.team_assignee_id == null ? null : String(conv.team_assignee_id);
+      if (selected.has(team)) return { conv, team };
+      const full = await intercom.getConversation(conv.id);
+      return { conv: full, team: teamAtClose(full) ?? null };
+    });
 
+    for (const { conv, team } of counted) {
+      if (!selected.has(team)) continue;
       const t = byTeam.get(team) || { id: team, count: 0, total: 0, positive: 0 };
       t.total++;
       const value = score(conv);
@@ -85,12 +110,21 @@ function createCx({ intercom, prefs, log = console }) {
     return { count, total, positiveShare: count ? positive / count : 0, teams };
   }
 
-  // For the Overview: reuses a result up to 15 minutes old for the same period.
+  // For the Overview: reuses a result up to 15 minutes old for the same
+  // period. fresh() returns it without waiting, or null; cachedPeriod() loads
+  // it, and people opening the tab at the same time share one load.
   let cached = null;
+  let loading = null;
+  const fresh = (start, now) =>
+    cached && cached.start === start && now - cached.at < OVERVIEW_CACHE_SECONDS ? cached : null;
   async function cachedPeriod(start, end, now) {
-    if (cached && cached.start === start && now - cached.at < OVERVIEW_CACHE_SECONDS) return cached;
-    cached = { start, at: now, ...(await period(start, end)) };
-    return cached;
+    if (fresh(start, now)) return cached;
+    if (!loading) {
+      loading = period(start, end)
+        .then((result) => (cached = { start, at: now, ...result }))
+        .finally(() => { loading = null; });
+    }
+    return loading;
   }
 
   // Safe versions for posts: a failure gives { error } instead of throwing, so
@@ -104,7 +138,7 @@ function createCx({ intercom, prefs, log = console }) {
     }
   };
 
-  return { period: safe(period), cachedPeriod: safe(cachedPeriod), teamIds, invalidate: () => { cached = null; } };
+  return { period: safe(period), cachedPeriod: safe(cachedPeriod), fresh, teamIds, invalidate: () => { cached = null; } };
 }
 
 module.exports = { createCx, DEFAULT_TEAM_NAMES, CX_ATTRIBUTE };

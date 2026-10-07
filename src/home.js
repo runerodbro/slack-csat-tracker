@@ -60,7 +60,9 @@ function createHome({ slack, settings, ratings, jobs, previews, access, prefs, c
     return { type: "actions", elements: [button("overview", "Overview"), button("settings", "Settings")] };
   }
 
-  async function weekBlocks() {
+  // view: { cx, pendingCx } for this one drawing. cx: a CX Score result to show
+  // (a second drawing after loading); pendingCx is set when it still has to load.
+  async function weekBlocks(view) {
     const now = nowSeconds();
     const start = clock.epochAt(jobs.lastReportFriday(now), 14, 0);
     const { stats, from } = await jobs.weekReport(start, now + 1, { withCx: false });
@@ -89,15 +91,22 @@ function createHome({ slack, settings, ratings, jobs, previews, access, prefs, c
       blocks.push(context(`🤖 Closed by Fin or a bot, not counted: ${stats.bots.count}`));
     }
     if (prefs.get().cxScore) {
-      const result = await cx.cachedPeriod(start, now + 1, now);
-      const at = result.at ? clock.parts(result.at) : null;
-      const asOf = at ? `${String(at.hour).padStart(2, "0")}:${String(at.minute).padStart(2, "0")}` : null;
-      blocks.push(...cxBlocks(result, asOf));
+      // Without a fresh result the tab shows "loading…" at once; publish()
+      // draws it again when the CX Score is in (or failed).
+      const result = view.cx || cx.fresh(start, now);
+      if (result) {
+        const at = result.at ? clock.parts(result.at) : null;
+        const asOf = at ? `${String(at.hour).padStart(2, "0")}:${String(at.minute).padStart(2, "0")}` : null;
+        blocks.push(...cxBlocks(result, asOf));
+      } else {
+        blocks.push(section("*CX Score* 🧭\nLoading…"));
+        view.pendingCx = { start, end: now + 1, now };
+      }
     }
     return blocks;
   }
 
-  async function overview() {
+  async function overview(view) {
     const s = ratings.currentStreak();
     const p = prefs.get();
     const headline = s.isNewRecord
@@ -110,7 +119,7 @@ function createHome({ slack, settings, ratings, jobs, previews, access, prefs, c
       section(headline),
       { type: "section", fields },
       divider,
-      ...(await weekBlocks()),
+      ...(await weekBlocks(view)),
       divider,
       {
         type: "section",
@@ -281,10 +290,19 @@ function createHome({ slack, settings, ratings, jobs, previews, access, prefs, c
     return blocks;
   }
 
-  async function publish(userId) {
+  // cxResult: a loaded CX Score for the second drawing, so it never loops.
+  async function publish(userId, cxResult = null) {
     const tab = tabs.get(userId) || "overview";
-    const body = tab === "settings" ? await settingsBlocks(await access.canEdit(userId), userId) : await overview();
+    const view = { cx: cxResult, pendingCx: null };
+    const body = tab === "settings" ? await settingsBlocks(await access.canEdit(userId), userId) : await overview(view);
     await slack.publishView(userId, { type: "home", blocks: [tabButtons(tab), divider, ...body] });
+    // The Overview went out with "loading…": load the CX Score, then draw the
+    // tab again with it if the person is still on the Overview.
+    if (view.pendingCx) {
+      const { start, end, now } = view.pendingCx;
+      const result = await cx.cachedPeriod(start, end, now);
+      if ((tabs.get(userId) || "overview") === "overview") await publish(userId, result);
+    }
   }
 
   // payload: a block_actions payload from Slack.
