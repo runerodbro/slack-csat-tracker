@@ -8,8 +8,9 @@ positive ratings, celebrates records, and sends a weekly report.
 ### Rating posts
 
 Each rating (1–5) is posted to Slack 5 minutes after it arrives, as a compact
-list: assignee (@mention when the email matches a Slack user), customer,
-rating emoji, the comment if there is one, and a link to the conversation.
+list: assignee (@mention when the email matches a Slack user), customer, the
+team inbox the conversation is in, rating emoji, the comment if there is one,
+and a link to the conversation.
 
 - If the customer changes the rating within the 5 minutes, only the final
   rating is posted.
@@ -44,8 +45,9 @@ Wednesday morning.
 
 Friday at 14:00 Copenhagen time, for Friday 14:00 to Friday 14:00: number of
 ratings, average, % positive, the distribution, and the top 5 agents by number
-of ratings with their average and % positive. Ratings without an agent count
-in the totals, not in the agent list.
+of ratings with their average and % positive, and the same split by team
+inbox, sorted by number of ratings ("No team" last). Ratings without an agent
+count in the totals, not in the agent list.
 
 ### Human ratings only
 
@@ -155,7 +157,7 @@ node --env-file=.env scripts/cli.js <command>
 | Command | What it does |
 |---|---|
 | `backfill [days]` | Imports ratings from the last N days (default 365) without Slack posts. Safe to run again. |
-| `classify` | Checks who closed each saved rating that was not checked yet. Safe to run again. |
+| `classify` | Fills in who closed each saved rating and its team inbox, where missing. Safe to run again. |
 | `streak` | Prints the streak and record. No post. |
 | `morning` | Posts the streak now. A test run does not use up a celebration. Add `--celebrate` to preview the celebration. |
 | `weekly [YYYY-MM-DD]` | Posts the weekly report for the Friday given, by default the last one. |

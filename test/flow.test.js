@@ -26,12 +26,13 @@ function setup() {
     const json = (data) => ({ ok: true, status: 200, json: async () => data, text: async () => "" });
     if (u.host === "intercom.test") {
       if (u.pathname === "/admins") return json({ admins: [{ id: 7, name: "Ann", email: "ann@x.io" }] });
+      if (u.pathname === "/teams") return json({ teams: [{ id: 11, name: "Billing" }, { id: 12, name: "Product A" }] });
       if (u.pathname.startsWith("/contacts/")) return json({ name: "Cy", email: "cy@example.com" });
       if (u.pathname.startsWith("/conversations/")) {
         const id = u.pathname.split("/").pop();
         const parts = state.closers?.[id];
         return json({
-          id, conversation_rating: state.rating,
+          id, conversation_rating: state.rating, team_assignee_id: state.teams?.[id] ?? null,
           ...(parts && { conversation_parts: { conversation_parts: [{ part_type: "close", created_at: 1, author: { type: parts } }] } }),
         });
       }
@@ -273,7 +274,40 @@ test("classify: checks saved ratings once and a bot close leaves the streak", as
   assert.equal(app.ratings.currentStreak("2026-06-05").since, "2026-06-01");
 
   state.closers = { "60": "bot" };
-  assert.deepEqual(await app.jobs.classify(), { human: 0, bot: 1, unknown: 0, failed: 0 });
+  assert.deepEqual(await app.jobs.classify(), { human: 0, bot: 1, unknown: 0, failed: 0, teams: { "No team": 1 } });
   assert.equal(app.ratings.currentStreak("2026-06-05").since, "2026-01-01", "the bot's 2/5 no longer breaks the streak");
-  assert.deepEqual(await app.jobs.classify(), { human: 0, bot: 0, unknown: 0, failed: 0 }, "nothing left to check");
+  assert.deepEqual(await app.jobs.classify(), { human: 0, bot: 0, unknown: 0, failed: 0, teams: {} }, "nothing left to check");
+});
+
+test("team inbox: shown on the rating post, split in the weekly report, filled in by classify", async () => {
+  const { app, state } = setup();
+  const now = Math.floor(Date.now() / 1000);
+  state.teams = { "70": 11, "71": 12, "72": 12 };
+
+  state.rating = rating(5, now);
+  await app.ratings.processConversation("70");
+  const post = state.calls.filter((c) => c.path === "/chat.postMessage").at(-1).body;
+  assert.match(post.attachments[0].blocks[0].text.text, /• \*Team:\* Billing\n/);
+
+  state.rating = rating(4, now);
+  await app.ratings.processConversation("71");
+  state.rating = rating(3, now);
+  await app.ratings.processConversation("72");
+  state.rating = rating(5, now);
+  delete state.teams["73"];
+  await app.ratings.processConversation("73"); // no team
+
+  const { addDays } = require("../src/time");
+  const p = app.clock.parts(now);
+  const friday = addDays(app.clock.localDate(now), (5 - p.weekday + 7) % 7 + (p.weekday === 5 && p.hour >= 14 ? 7 : 0));
+  const stats = await app.jobs.weekly(friday);
+  assert.deepEqual(stats.teams.map((t) => [t.name, t.count]), [["Product A", 2], ["Billing", 1], ["No team", 1]]);
+  const report = JSON.stringify(state.calls.filter((c) => c.path === "/chat.postMessage").at(-1).body);
+  assert.match(report, /By team inbox\*\\n\*Product A\*: 2 ratings · avg 3.50 · 50% positive/);
+
+  // Older rows without a team get it from classify.
+  app.db.prepare("UPDATE ratings SET team_id = NULL, team_name = NULL").run();
+  const result = await app.jobs.classify();
+  assert.deepEqual(result.teams, { Billing: 1, "Product A": 2, "No team": 1 });
+  assert.equal(app.db.prepare("SELECT team_name FROM ratings WHERE conversation_id = '70'").get().team_name, "Billing");
 });

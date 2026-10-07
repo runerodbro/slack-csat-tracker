@@ -12,13 +12,15 @@ const LATE_POST_LIMIT = 6 * 60 * 60;
 
 function createJobs({ db, intercom, slack, clock, ratings, queue, log = console }) {
   const weekRows = db.prepare(
-    `SELECT score, admin_id, admin_name FROM ratings WHERE rated_at >= ? AND rated_at < ? AND ${COUNTS_SQL}`,
+    `SELECT score, admin_id, admin_name, team_id, team_name FROM ratings WHERE rated_at >= ? AND rated_at < ? AND ${COUNTS_SQL}`,
   );
   const weekBotRows = db.prepare(
     "SELECT COUNT(*) AS count, AVG(score) AS average FROM ratings WHERE rated_at >= ? AND rated_at < ? AND closed_by = 'bot'",
   );
-  const unclassified = db.prepare("SELECT conversation_id FROM ratings WHERE closed_by IS NULL");
-  const setClosedBy = db.prepare("UPDATE ratings SET closed_by = ? WHERE conversation_id = ?");
+  const unclassified = db.prepare("SELECT conversation_id FROM ratings WHERE closed_by IS NULL OR team_id IS NULL");
+  const setClassified = db.prepare(
+    "UPDATE ratings SET closed_by = ?, team_id = ?, team_name = ? WHERE conversation_id = ?",
+  );
   const getRating = db.prepare("SELECT score, remark FROM ratings WHERE conversation_id = ?");
 
   const celebratedKeys = db.prepare("SELECT run_key FROM scheduled_runs WHERE job = 'celebration'");
@@ -130,22 +132,27 @@ function createJobs({ db, intercom, slack, clock, ratings, queue, log = console 
     return saved;
   }
 
-  // Checks who closed each saved rating that was not checked yet.
+  // Fills in who closed each saved rating and its team inbox, where missing.
   async function classify({ onProgress = () => {} } = {}) {
     const counts = { human: 0, bot: 0, unknown: 0, failed: 0 };
+    const teams = {};
     const rows = unclassified.all();
     for (const [i, row] of rows.entries()) {
       try {
-        const closer = closedBy(await intercom.getConversation(row.conversation_id)) ?? "unknown";
-        setClosedBy.run(closer, row.conversation_id);
+        const conv = await intercom.getConversation(row.conversation_id);
+        const closer = closedBy(conv) ?? "unknown";
+        const team = await ratings.teamFields(conv);
+        setClassified.run(closer, team.team_id, team.team_name, row.conversation_id);
         counts[closer]++;
+        const label = team.team_name || (team.team_id === "none" ? "No team" : `Team ${team.team_id}`);
+        teams[label] = (teams[label] || 0) + 1;
       } catch (err) {
         counts.failed++;
         log.warn(`Classify ${row.conversation_id}: ${err.message}`);
       }
       if ((i + 1) % 50 === 0) onProgress({ checked: i + 1, total: rows.length, ...counts });
     }
-    return counts;
+    return { ...counts, teams };
   }
 
   return { morning, weekly, reconcile, backfill, classify, lastReportFriday };

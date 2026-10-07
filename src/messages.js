@@ -69,8 +69,9 @@ function ratingMessage({ rating, url, assigneeSlackId, change }) {
     "*Conversation rated:*",
     `• *Assignee:* ${assignee}`,
     `• *Customer:* ${customer}`,
-    `• *Rating:* ${s.emoji}`,
   ];
+  if (rating.team_name) lines.push(`• *Team:* ${escape(rating.team_name)}`);
+  lines.push(`• *Rating:* ${s.emoji}`);
   if (rating.remark) {
     let comment = escape(rating.remark).replace(/\s*\n\s*/g, " ");
     if (comment.length > MAX_COMMENT) comment = `${comment.slice(0, MAX_COMMENT)}…`;
@@ -250,6 +251,16 @@ function weeklyMessage({ stats, from, to }) {
     )
     .join("\n");
   blocks.push({ type: "section", text: { type: "mrkdwn", text: `*Top agents*\n${agents}` } });
+
+  if (stats.teams?.length) {
+    const teams = stats.teams
+      .map(
+        (t) =>
+          `*${escape(t.name)}*: ${t.count} ${t.count === 1 ? "rating" : "ratings"} · avg ${t.average.toFixed(2)} · ${pct(t.positiveShare)} positive`,
+      )
+      .join("\n");
+    blocks.push({ type: "section", text: { type: "mrkdwn", text: `*By team inbox*\n${teams}` } });
+  }
 
   // Plain blocks, not an attachment: Slack collapses long attachments behind "Show more".
   if (stats.bots?.count) {

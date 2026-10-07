@@ -14,13 +14,16 @@ function createRatings({ db, intercom, slack, clock, config, log = console }) {
     get: db.prepare("SELECT * FROM ratings WHERE conversation_id = ?"),
     insert: db.prepare(`
       INSERT INTO ratings (conversation_id, score, remark, admin_id, admin_name, admin_email,
-                           contact_id, contact_name, contact_email, rated_at, source, closed_by)
+                           contact_id, contact_name, contact_email, rated_at, source, closed_by,
+                           team_id, team_name)
       VALUES (:conversation_id, :score, :remark, :admin_id, :admin_name, :admin_email,
-              :contact_id, :contact_name, :contact_email, :rated_at, :source, :closed_by)`),
+              :contact_id, :contact_name, :contact_email, :rated_at, :source, :closed_by,
+              :team_id, :team_name)`),
     update: db.prepare(`
       UPDATE ratings SET score = :score, remark = :remark, admin_id = :admin_id, admin_name = :admin_name,
              admin_email = :admin_email, contact_id = :contact_id, contact_name = :contact_name,
-             contact_email = :contact_email, rated_at = :rated_at, source = :source, closed_by = :closed_by, updated_at = unixepoch()
+             contact_email = :contact_email, rated_at = :rated_at, source = :source, closed_by = :closed_by,
+             team_id = :team_id, team_name = :team_name, updated_at = unixepoch()
       WHERE conversation_id = :conversation_id`),
     posted: db.prepare("UPDATE ratings SET slack_ts = ?, slack_channel = ?, posted_at = ? WHERE conversation_id = ?"),
     negatives: db.prepare(`SELECT rated_at FROM ratings WHERE score <= 3 AND ${COUNTS_SQL} AND conversation_id IS NOT ?`),
@@ -61,6 +64,19 @@ function createRatings({ db, intercom, slack, clock, config, log = console }) {
       log.warn(`Contact ${id}: ${err.message}`);
       const a = conversation.source?.author || {};
       return { contact_id: id, contact_name: a.name || null, contact_email: a.email || null };
+    }
+  }
+
+  // The team inbox the conversation is in. A failed team lookup keeps the ID.
+  async function teamFields(conv) {
+    const id = conv.team_assignee_id;
+    if (id == null || id === "" || Number(id) === 0) return { team_id: "none", team_name: null };
+    try {
+      const team = await intercom.getTeam(id);
+      return { team_id: String(id), team_name: team?.name || null };
+    } catch (err) {
+      log.warn(`Team ${id}: ${err.message}`);
+      return { team_id: String(id), team_name: null };
     }
   }
 
@@ -159,6 +175,7 @@ function createRatings({ db, intercom, slack, clock, config, log = console }) {
         // post is retried.
         source: post ? "webhook" : existing?.source || "backfill",
         closed_by: closer,
+        ...(await teamFields(conv)),
       };
       if (existing) q.update.run(row);
       else q.insert.run(row);
@@ -184,7 +201,7 @@ function createRatings({ db, intercom, slack, clock, config, log = console }) {
     return needsPost ? "posted" : needsUpdate ? "updated" : "unchanged";
   }
 
-  return { processConversation, currentStreak, streakStartDate };
+  return { processConversation, currentStreak, streakStartDate, teamFields };
 }
 
 module.exports = { createRatings };

@@ -44,3 +44,10 @@ test("streak message: positive wording, start date and record range start the da
   assert.doesNotMatch(json, /negative/);
   assert.match(json, /310 days \(7 Feb 2023 – 13 Dec 2023\)/);
 });
+
+test("rating message: team line only when the team is known", () => {
+  const withTeam = ratingMessage({ rating: { ...rating, score: 5, team_name: "Billing <EU>" }, url: "u" });
+  assert.match(withTeam.attachments[0].blocks[0].text.text, /• \*Customer:\* .*\n• \*Team:\* Billing &lt;EU&gt;\n• \*Rating:\*/);
+  const without = ratingMessage({ rating: { ...rating, score: 5 }, url: "u" });
+  assert.doesNotMatch(without.attachments[0].blocks[0].text.text, /Team/);
+});

@@ -35,6 +35,20 @@ function createIntercom({ token, clientSecret, apiUrl, appUrl, workspaceId }) {
     return admins.get(String(id)) || null;
   }
 
+  let teams = null;
+  let teamsLoadedAt = 0;
+  // Team inbox by ID, from the team list (cached like admins). null if unknown.
+  async function getTeam(id) {
+    if (id == null) return null;
+    const age = Date.now() - teamsLoadedAt;
+    if (!teams || age > ADMIN_CACHE_MS || (!teams.has(String(id)) && age > ADMIN_MISS_REFRESH_MS)) {
+      const data = await request("GET", "/teams");
+      teams = new Map((data.teams || []).map((t) => [String(t.id), t]));
+      teamsLoadedAt = Date.now();
+    }
+    return teams.get(String(id)) || null;
+  }
+
   let appId = workspaceId;
   async function conversationUrl(id) {
     if (!appId) appId = (await request("GET", "/me")).app?.id_code;
@@ -67,6 +81,7 @@ function createIntercom({ token, clientSecret, apiUrl, appUrl, workspaceId }) {
     getConversation: (id) => request("GET", `/conversations/${encodeURIComponent(id)}`),
     getContact: (id) => request("GET", `/contacts/${encodeURIComponent(id)}`),
     getAdmin,
+    getTeam,
     conversationUrl,
     searchRated,
     verifySignature,

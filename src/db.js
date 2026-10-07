@@ -93,6 +93,12 @@ const MIGRATIONS = [
   -- NULL: not checked yet (counts as human). Ratings closed by a bot do not count.
   ALTER TABLE ratings ADD COLUMN closed_by TEXT;
   `,
+  `
+  -- The team inbox the conversation was in. team_id 'none' = no team;
+  -- NULL = not checked yet.
+  ALTER TABLE ratings ADD COLUMN team_id TEXT;
+  ALTER TABLE ratings ADD COLUMN team_name TEXT;
+  `,
 ];
 
 function schemaVersion(db) {
