@@ -21,6 +21,9 @@ If nothing in the wiki changes, write "None" under "Wiki update".
 
 ## Working on this repo
 
+- Before building, list the decisions and open questions for a change and get
+  the maintainer's answer. Do not pick a default and build on it; this
+  includes layout, behaviour, naming and what to leave out.
 - Every change goes through a pull request; `main` requires the `test` check.
   Pull requests are squash merged.
 - Run `npm test` before pushing, and commit only when it passes.
