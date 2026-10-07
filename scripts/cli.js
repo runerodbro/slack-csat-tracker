@@ -1,7 +1,7 @@
 // Run a job by hand. Examples:
 //   node --env-file=.env scripts/cli.js backfill 365   import history, no Slack posts
 //   node --env-file=.env scripts/cli.js classify       check who closed each saved rating
-//   node --env-file=.env scripts/cli.js classify --recheck-teams   work out every rating's team again
+//   node --env-file=.env scripts/cli.js classify --recheck-teams   work out every rating's team and topic again
 //   node --env-file=.env scripts/cli.js streak         print the streak, no Slack post
 //   node --env-file=.env scripts/cli.js morning        post the streak message now
 //   node --env-file=.env scripts/cli.js weekly [YYYY-MM-DD]   post the weekly report now

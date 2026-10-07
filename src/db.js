@@ -99,6 +99,13 @@ const MIGRATIONS = [
   ALTER TABLE ratings ADD COLUMN team_id TEXT;
   ALTER TABLE ratings ADD COLUMN team_name TEXT;
   `,
+  `
+  -- The conversation's topic from its Category, Product Area and Outcome
+  -- conversation attributes. NULL = not set in Intercom (or not checked yet).
+  ALTER TABLE ratings ADD COLUMN category TEXT;
+  ALTER TABLE ratings ADD COLUMN product_area TEXT;
+  ALTER TABLE ratings ADD COLUMN outcome TEXT;
+  `,
 ];
 
 function schemaVersion(db) {

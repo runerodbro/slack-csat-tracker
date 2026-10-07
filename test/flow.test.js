@@ -28,12 +28,14 @@ function setup() {
       if (u.pathname === "/admins") return json({ admins: [{ id: 7, name: "Ann", email: "ann@x.io" }] });
       if (u.pathname === "/teams") return json({ teams: [{ id: 11, name: "Billing" }, { id: 12, name: "Product A" }, { id: 13, name: "Support: Chat" }, { id: 99, name: "Support: Feedback" }] });
       if (u.pathname.startsWith("/contacts/")) return json({ name: "Cy", email: "cy@example.com" });
+      if (u.pathname === "/conversations/search") return json({ conversations: state.search ?? [] });
       if (u.pathname.startsWith("/conversations/")) {
         const id = u.pathname.split("/").pop();
         const closer = state.closers?.[id];
         const parts = state.parts?.[id] ?? (closer && [{ part_type: "close", created_at: 1, author: { type: closer } }]);
         return json({
           id, conversation_rating: state.rating, team_assignee_id: state.teams?.[id] ?? null,
+          custom_attributes: state.attributes?.[id] ?? {},
           ...(parts && { conversation_parts: { conversation_parts: parts } }),
         });
       }
@@ -288,7 +290,7 @@ test("team inbox: shown on the rating post, split in the weekly report, filled i
   state.rating = rating(5, now);
   await app.ratings.processConversation("70");
   const post = state.calls.filter((c) => c.path === "/chat.postMessage").at(-1).body;
-  assert.match(post.attachments[0].blocks[0].text.text, /• \*Team:\* Billing$/);
+  assert.match(post.attachments[0].blocks[0].text.text, /• \*Assignee:\* <@UANN> · Billing\n/);
 
   state.rating = rating(4, now);
   await app.ratings.processConversation("71");
@@ -325,8 +327,8 @@ test("team inbox: a rating moved to the feedback team after the close keeps its 
   ] };
   state.rating = rating(2, now);
   await app.ratings.processConversation("80");
-  const post = state.calls.filter((c) => c.path === "/chat.postMessage").find((c) => c.body.attachments?.[0]?.blocks?.[0]?.text?.text?.includes("Team"));
-  assert.match(post.body.attachments[0].blocks[0].text.text, /• \*Team:\* Support Chat/);
+  const post = state.calls.filter((c) => c.path === "/chat.postMessage").find((c) => c.body.attachments?.[0]?.blocks?.[0]?.text?.text?.includes("Assignee"));
+  assert.match(post.body.attachments[0].blocks[0].text.text, /• \*Assignee:\* <@UANN> · Support Chat\n/);
   assert.equal(app.db.prepare("SELECT team_name FROM ratings WHERE conversation_id = '80'").get().team_name, "Support: Chat");
 
   // Rows saved with the old rule get the right team from --recheck-teams.
@@ -334,4 +336,37 @@ test("team inbox: a rating moved to the feedback team after the close keeps its 
   const result = await app.jobs.classify({ recheckTeams: true });
   assert.deepEqual(result.teams, { "Support: Chat": 1 });
   assert.equal(app.db.prepare("SELECT team_name FROM ratings WHERE conversation_id = '80'").get().team_name, "Support: Chat");
+});
+
+test("topic: shown on the rating post, saved, and added to the post once when Intercom sets it later", async () => {
+  const { app, state, slackCalls } = setup();
+  const now = Math.floor(Date.now() / 1000);
+  state.attributes = { "90": {
+    "Has attachments": false, "Category (Support)": "Bug / Troubleshooting", "Product Area (Flipbooks)": "",
+    "Product Area (Horizon)": "Aliases", "Outcome (Support)": "Solved for the customer 🎉",
+  } };
+  state.rating = rating(5, now);
+  await app.ratings.processConversation("90");
+  const post = slackCalls().at(-1).body.attachments[0].blocks[0].text.text;
+  assert.match(post, /• \*Topic:\* Bug \/ Troubleshooting › Aliases · Solved for the customer 🎉/);
+  assert.deepEqual(
+    { ...app.db.prepare("SELECT category, product_area, outcome FROM ratings WHERE conversation_id = '90'").get() },
+    { category: "Bug / Troubleshooting", product_area: "Aliases", outcome: "Solved for the customer 🎉" },
+  );
+
+  // Posted before the AI filled the attributes: the hourly check adds the topic.
+  await app.ratings.processConversation("91");
+  assert.doesNotMatch(slackCalls().at(-1).body.attachments[0].blocks[0].text.text, /Topic/);
+  const search = (id) => ({ id, conversation_rating: state.rating, custom_attributes: state.attributes[id] });
+  state.attributes["91"] = { "Category (Support)": "Billing", "Outcome (Support)": "Workaround offered ♻️" };
+  state.search = [search("90"), search("91")];
+  const before = slackCalls().length;
+  await app.jobs.reconcile();
+  const updates = slackCalls().slice(before);
+  assert.equal(updates.length, 1, "only the post without a topic is updated");
+  assert.equal(updates[0].path, "/chat.update");
+  assert.match(updates[0].body.attachments[0].blocks[0].text.text, /• \*Topic:\* Billing · Workaround offered ♻️/);
+
+  await app.jobs.reconcile();
+  assert.equal(slackCalls().length, before + 1, "updated once");
 });

@@ -8,6 +8,7 @@ const { nowSeconds } = require("./time");
 const { isNegative, computeStreak, breakInfo } = require("./streak");
 const messages = require("./messages");
 const { closedBy, teamAtClose, COUNTS_SQL } = require("./closer");
+const { topicFields, hasTopic } = require("./topic");
 
 function createRatings({ db, intercom, slack, clock, config, log = console }) {
   const q = {
@@ -15,15 +16,16 @@ function createRatings({ db, intercom, slack, clock, config, log = console }) {
     insert: db.prepare(`
       INSERT INTO ratings (conversation_id, score, remark, admin_id, admin_name, admin_email,
                            contact_id, contact_name, contact_email, rated_at, source, closed_by,
-                           team_id, team_name)
+                           team_id, team_name, category, product_area, outcome)
       VALUES (:conversation_id, :score, :remark, :admin_id, :admin_name, :admin_email,
               :contact_id, :contact_name, :contact_email, :rated_at, :source, :closed_by,
-              :team_id, :team_name)`),
+              :team_id, :team_name, :category, :product_area, :outcome)`),
     update: db.prepare(`
       UPDATE ratings SET score = :score, remark = :remark, admin_id = :admin_id, admin_name = :admin_name,
              admin_email = :admin_email, contact_id = :contact_id, contact_name = :contact_name,
              contact_email = :contact_email, rated_at = :rated_at, source = :source, closed_by = :closed_by,
-             team_id = :team_id, team_name = :team_name, updated_at = unixepoch()
+             team_id = :team_id, team_name = :team_name, category = :category, product_area = :product_area,
+             outcome = :outcome, updated_at = unixepoch()
       WHERE conversation_id = :conversation_id`),
     posted: db.prepare("UPDATE ratings SET slack_ts = ?, slack_channel = ?, posted_at = ? WHERE conversation_id = ?"),
     negatives: db.prepare(`SELECT rated_at FROM ratings WHERE score <= 3 AND ${COUNTS_SQL} AND conversation_id IS NOT ?`),
@@ -38,6 +40,7 @@ function createRatings({ db, intercom, slack, clock, config, log = console }) {
         previous_record_days = excluded.previous_record_days, posted_at = excluded.posted_at,
         slack_ts = excluded.slack_ts, slack_channel = excluded.slack_channel, restored_at = NULL`),
     restoreBreak: db.prepare("UPDATE streak_breaks SET restored_at = ? WHERE conversation_id = ?"),
+    setTopic: db.prepare("UPDATE ratings SET category = ?, product_area = ?, outcome = ? WHERE conversation_id = ?"),
   };
 
   function negativeDates(excludeConversationId = null) {
@@ -178,6 +181,7 @@ function createRatings({ db, intercom, slack, clock, config, log = console }) {
         source: post ? "webhook" : existing?.source || "backfill",
         closed_by: closer,
         ...(await teamFields(conv)),
+        ...topicFields(conv),
       };
       if (existing) q.update.run(row);
       else q.insert.run(row);
@@ -203,7 +207,23 @@ function createRatings({ db, intercom, slack, clock, config, log = console }) {
     return needsPost ? "posted" : needsUpdate ? "updated" : "unchanged";
   }
 
-  return { processConversation, currentStreak, streakStartDate, teamFields };
+  // Intercom can set the topic attributes after the rating was posted. When a
+  // posted rating has no topic yet and the conversation now has one, save it
+  // and update the Slack post once. Returns true when the post was updated.
+  async function refreshTopic(conv) {
+    const id = String(conv.id);
+    const row = q.get.get(id);
+    if (!row?.slack_ts || row.closed_by === "bot" || hasTopic(row)) return false;
+    const topic = topicFields(conv);
+    if (!hasTopic(topic)) return false;
+    q.setTopic.run(topic.category, topic.product_area, topic.outcome, id);
+    const url = await intercom.conversationUrl(id);
+    const assigneeSlackId = await slack.userIdByEmail(row.admin_email);
+    await slack.update(row.slack_ts, messages.ratingMessage({ rating: { ...row, ...topic }, url, assigneeSlackId }), row.slack_channel);
+    return true;
+  }
+
+  return { processConversation, currentStreak, streakStartDate, teamFields, refreshTopic };
 }
 
 module.exports = { createRatings };
