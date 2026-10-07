@@ -37,3 +37,21 @@ test("weekly report on Friday from 14:00, including after a restart", async () =
   await at("2026-10-08", 14, 0); // Thursday
   assert.deepEqual(runs, ["weekly 2026-10-09"]);
 });
+
+test("switched-off posts are skipped, and go out if switched on again inside the window", async () => {
+  const { open } = require("../src/db");
+  const clock = makeClock("Europe/Copenhagen");
+  const runs = [];
+  const jobs = { morning: async (d) => runs.push(`morning ${d}`), weekly: async (d) => runs.push(`weekly ${d}`), reconcile: async () => 0 };
+  const on = { morning: false, weekly: false };
+  const scheduler = createScheduler({
+    db: open(":memory:"), clock, jobs, queue: { processDue: async () => {} }, prefs: { get: () => on },
+    log: { info() {}, warn() {}, error() {} },
+  });
+  await scheduler.tick(clock.epochAt("2026-10-09", 8, 30)); // Friday
+  await scheduler.tick(clock.epochAt("2026-10-09", 14, 0));
+  assert.deepEqual(runs, []);
+  on.weekly = true;
+  await scheduler.tick(clock.epochAt("2026-10-09", 15, 0));
+  assert.deepEqual(runs, ["weekly 2026-10-09"]);
+});

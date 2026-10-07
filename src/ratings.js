@@ -10,7 +10,7 @@ const messages = require("./messages");
 const { closedBy, teamAtClose, COUNTS_SQL } = require("./closer");
 const { topicFields, hasTopic } = require("./topic");
 
-function createRatings({ db, intercom, slack, clock, config, log = console }) {
+function createRatings({ db, intercom, slack, clock, config, prefs, log = console }) {
   const q = {
     get: db.prepare("SELECT * FROM ratings WHERE conversation_id = ?"),
     insert: db.prepare(`
@@ -28,20 +28,29 @@ function createRatings({ db, intercom, slack, clock, config, log = console }) {
              outcome = :outcome, updated_at = unixepoch()
       WHERE conversation_id = :conversation_id`),
     posted: db.prepare("UPDATE ratings SET slack_ts = ?, slack_channel = ?, posted_at = ? WHERE conversation_id = ?"),
+    negPosted: db.prepare("UPDATE ratings SET neg_slack_ts = ?, neg_slack_channel = ? WHERE conversation_id = ?"),
     negatives: db.prepare(`SELECT rated_at FROM ratings WHERE score <= 3 AND ${COUNTS_SQL} AND conversation_id IS NOT ?`),
     firstRating: db.prepare(`SELECT MIN(rated_at) AS first FROM ratings WHERE ${COUNTS_SQL}`),
     getBreak: db.prepare("SELECT * FROM streak_breaks WHERE conversation_id = ?"),
     saveBreak: db.prepare(`
       INSERT INTO streak_breaks (conversation_id, broken_at, length_days, was_record, previous_record_days,
-                                 posted_at, slack_ts, slack_channel, restored_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL)
+                                 posted_at, slack_ts, slack_channel, restored_at, neg_slack_ts, neg_slack_channel)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, NULL)
       ON CONFLICT (conversation_id) DO UPDATE SET
         broken_at = excluded.broken_at, length_days = excluded.length_days, was_record = excluded.was_record,
         previous_record_days = excluded.previous_record_days, posted_at = excluded.posted_at,
-        slack_ts = excluded.slack_ts, slack_channel = excluded.slack_channel, restored_at = NULL`),
+        slack_ts = excluded.slack_ts, slack_channel = excluded.slack_channel, restored_at = NULL,
+        neg_slack_ts = NULL, neg_slack_channel = NULL`),
+    negBreak: db.prepare("UPDATE streak_breaks SET neg_slack_ts = ?, neg_slack_channel = ? WHERE conversation_id = ?"),
     restoreBreak: db.prepare("UPDATE streak_breaks SET restored_at = ? WHERE conversation_id = ?"),
     setTopic: db.prepare("UPDATE ratings SET category = ?, product_area = ?, outcome = ? WHERE conversation_id = ?"),
   };
+
+  // The separate 1–3 channel, if one is set and it is not the posting channel.
+  function negativeChannel() {
+    const channel = prefs.negativeChannel();
+    return channel && channel !== slack.channel() ? channel : null;
+  }
 
   function negativeDates(excludeConversationId = null) {
     return q.negatives.all(excludeConversationId).map((r) => clock.localDate(r.rated_at));
@@ -101,7 +110,10 @@ function createRatings({ db, intercom, slack, clock, config, log = console }) {
         previousRecordDays: info.previousRecord ? info.previousRecord.length : null,
         isRecord: info.isRecord,
       };
-      const posted = await slack.post(messages.breakMessage({ info: details, rating: row, url }));
+      // Main channel (if break posts are on) and the 1–3 channel. Saved after
+      // the main post, so a retry never posts it twice.
+      const message = messages.breakMessage({ info: details, rating: row, url });
+      const posted = prefs.get().breaks ? await slack.post(message) : null;
       q.saveBreak.run(
         row.conversation_id,
         row.rated_at,
@@ -109,19 +121,20 @@ function createRatings({ db, intercom, slack, clock, config, log = console }) {
         details.isRecord ? 1 : 0,
         details.previousRecordDays,
         nowSeconds(),
-        posted.ts,
-        posted.channel,
+        posted?.ts ?? null,
+        posted?.channel ?? null,
       );
+      const negChannel = negativeChannel();
+      if (negChannel) {
+        const copy = await slack.post(message, negChannel);
+        q.negBreak.run(copy.ts, copy.channel, row.conversation_id);
+      }
     } else if (!isNegative(row.score) && active) {
       const stillBroken = negativeDates(row.conversation_id).includes(clock.localDate(brk.broken_at));
       const info = { length: brk.length_days };
-      if (brk.slack_ts) {
-        await slack.update(
-          brk.slack_ts,
-          messages.restoredMessage({ info, rating: row, url, stillBroken }),
-          brk.slack_channel,
-        );
-      }
+      const message = messages.restoredMessage({ info, rating: row, url, stillBroken });
+      if (brk.slack_ts) await slack.update(brk.slack_ts, message, brk.slack_channel);
+      if (brk.neg_slack_ts) await slack.update(brk.neg_slack_ts, message, brk.neg_slack_channel);
       q.restoreBreak.run(nowSeconds(), row.conversation_id);
     }
   }
@@ -150,15 +163,22 @@ function createRatings({ db, intercom, slack, clock, config, log = console }) {
 
     // Silent history rows only get Slack messages when the rating changes later.
     // Ratings on conversations closed by a bot never get Slack messages.
+    // The main channel gets a post when the settings allow it (prefs.js); an
+    // existing post is always updated. The 1–3 channel gets every 1–3 rating,
+    // and its copy is updated too, also when the rating becomes positive.
     const active = post && !byBot && (!existing || changed || existing.source !== "backfill");
-    const needsPost = active && !existing?.slack_ts;
+    const negChannel = negativeChannel();
+    const needsPost = active && !existing?.slack_ts && prefs.allowsMain(score, remark);
     const needsUpdate = active && changed && Boolean(existing?.slack_ts);
+    const needsNegPost = active && Boolean(negChannel) && isNegative(score) && !existing?.neg_slack_ts;
+    const needsNegUpdate = active && changed && Boolean(existing?.neg_slack_ts);
+    const needsMessage = needsPost || needsUpdate || needsNegPost || needsNegUpdate;
 
     let row = existing;
     if (!existing || changed) {
       const admin = await intercom.getAdmin(rating.teammate?.id ?? conv.admin_assignee_id);
       const contact =
-        needsPost || needsUpdate
+        needsMessage
           ? await contactFields(conv, rating)
           : {
               contact_id: rating.contact?.id || existing?.contact_id || null,
@@ -192,19 +212,27 @@ function createRatings({ db, intercom, slack, clock, config, log = console }) {
     if (!active) return existing ? "unchanged" : "saved";
 
     const url = await intercom.conversationUrl(id);
-    if (needsPost || needsUpdate) {
+    if (needsMessage) {
       const assigneeSlackId = await slack.userIdByEmail(row.admin_email);
       const change = existing && changed ? { from: existing.score } : null;
       const message = messages.ratingMessage({ rating: row, url, assigneeSlackId, change });
       if (needsPost) {
         const posted = await slack.post(message);
         q.posted.run(posted.ts, posted.channel, nowSeconds(), id);
-      } else {
+      } else if (needsUpdate) {
         await slack.update(existing.slack_ts, message, existing.slack_channel);
+      }
+      if (needsNegPost) {
+        const posted = await slack.post(message, negChannel);
+        q.negPosted.run(posted.ts, posted.channel, id);
+      } else if (needsNegUpdate) {
+        await slack.update(existing.neg_slack_ts, message, existing.neg_slack_channel);
       }
     }
     await syncBreak(row, url);
-    return needsPost ? "posted" : needsUpdate ? "updated" : "unchanged";
+    if (needsPost || needsNegPost) return "posted";
+    if (needsUpdate || needsNegUpdate) return "updated";
+    return active && !existing?.slack_ts ? "saved (no post: settings)" : "unchanged";
   }
 
   // Intercom can set the topic attributes after the rating was posted. When a
@@ -213,13 +241,15 @@ function createRatings({ db, intercom, slack, clock, config, log = console }) {
   async function refreshTopic(conv) {
     const id = String(conv.id);
     const row = q.get.get(id);
-    if (!row?.slack_ts || row.closed_by === "bot" || hasTopic(row)) return false;
+    if ((!row?.slack_ts && !row?.neg_slack_ts) || row.closed_by === "bot" || hasTopic(row)) return false;
     const topic = topicFields(conv);
     if (!hasTopic(topic)) return false;
     q.setTopic.run(topic.category, topic.product_area, topic.outcome, id);
     const url = await intercom.conversationUrl(id);
     const assigneeSlackId = await slack.userIdByEmail(row.admin_email);
-    await slack.update(row.slack_ts, messages.ratingMessage({ rating: { ...row, ...topic }, url, assigneeSlackId }), row.slack_channel);
+    const message = messages.ratingMessage({ rating: { ...row, ...topic }, url, assigneeSlackId });
+    if (row.slack_ts) await slack.update(row.slack_ts, message, row.slack_channel);
+    if (row.neg_slack_ts) await slack.update(row.neg_slack_ts, message, row.neg_slack_channel);
     return true;
   }
 

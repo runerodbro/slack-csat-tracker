@@ -107,13 +107,30 @@ Open the app in Slack to see its Home tab, with two buttons:
   score, per team inbox, and ratings closed by bots); the posting channel and
   the schedule. A dropdown sends a preview of any post to the app's Messages
   tab, with the same data as `/csat preview`.
-- **Settings**: the posting channel and the app admins. Workspace admins and
-  owners and the app admins can change them; everyone else sees them
-  read-only.
-  - Picking a new posting channel works like `/csat here`: the app posts a
+- **Settings**: workspace admins and owners and the app admins can change
+  them; everyone else sees them read-only.
+  - **Posting channel.** Picking one works like `/csat here`: the app posts a
     confirmation there. If the bot is not in the channel, nothing changes.
-  - App admins can change settings and use `/csat here`. They can also add or
-    remove app admins.
+  - **1–3 channel** (optional). Every 1–3 rating post and every "Streak has
+    been broken" post also goes here, whatever the switches and filters say.
+    A rating changed from 4–5 to 1–3 gets a new post here; a copy whose
+    rating changes is updated, also when it becomes 4–5. The app posts a
+    confirmation in the channel. It can't be the same channel as the posting
+    channel.
+  - **App admins** can change settings and use `/csat here`. They can also
+    add or remove app admins.
+  - **Posts**: switches for rating posts, the morning streak post (with
+    records and celebrations), the weekly report and "Streak has been
+    broken" posts. They apply to the posting channel. Ratings are always
+    saved and counted, and the streak and record are always kept. A
+    celebration on a day the morning post is off comes with the next morning
+    post. A post switched on again inside its window (see Schedule) still
+    goes out that day. CLI commands always post.
+  - **Rating posts in the posting channel**: which scores get a post, and
+    "only when the customer left a comment" for 4–5 and for 1–3. The filter
+    looks at the rating as it is now: a rating that passes after a change,
+    such as an added comment, is posted then. A post that already exists is
+    always updated.
 
 The Home tab is drawn again every time someone opens it, so the numbers are
 current.
@@ -162,7 +179,8 @@ messages are.
 
 ### Schedule
 
-Each scheduled post goes out once per period. If the app was not running at
+Each scheduled post goes out once per period, unless it is switched off in
+Settings. If the app was not running at
 the planned time, the post goes out when it starts again inside the window:
 
 | Post | Window |

@@ -4,6 +4,9 @@
 // Weekly report: Friday, 14:00 local time.
 // Each job runs once per period (scheduled_runs table). If the server was down
 // at the planned time, the job still runs when it comes back inside the window.
+// A post switched off in the Home tab (prefs.js) is skipped, and not marked as
+// run, so it still goes out if it is switched on again inside the window. A
+// celebration on a skipped day comes with the next morning post.
 
 const { nowSeconds } = require("./time");
 
@@ -11,7 +14,7 @@ const MORNING = { from: 8 * 60 + 30, until: 11 * 60 };
 const WEEKLY = { from: 14 * 60, until: 18 * 60 };
 const RECONCILE_EVERY_MS = 60 * 60 * 1000;
 
-function createScheduler({ db, clock, jobs, queue, log = console, intervalMs = 20000 }) {
+function createScheduler({ db, clock, jobs, queue, prefs = { get: () => ({ morning: true, weekly: true }) }, log = console, intervalMs = 20000 }) {
   const hasRun = db.prepare("SELECT 1 FROM scheduled_runs WHERE job = ? AND run_key = ?");
   const markRun = db.prepare("INSERT OR IGNORE INTO scheduled_runs (job, run_key) VALUES (?, ?)");
 
@@ -38,10 +41,11 @@ function createScheduler({ db, clock, jobs, queue, log = console, intervalMs = 2
 
       const p = clock.parts(now);
       const minutes = p.hour * 60 + p.minute;
-      if (p.weekday <= 5 && minutes >= MORNING.from && minutes < MORNING.until) {
+      const on = prefs.get();
+      if (on.morning && p.weekday <= 5 && minutes >= MORNING.from && minutes < MORNING.until) {
         await once("morning", p.date, () => jobs.morning(p.date));
       }
-      if (p.weekday === 5 && minutes >= WEEKLY.from && minutes < WEEKLY.until) {
+      if (on.weekly && p.weekday === 5 && minutes >= WEEKLY.from && minutes < WEEKLY.until) {
         await once("weekly", p.date, () => jobs.weekly(p.date));
       }
       if (Date.now() - lastReconcile >= RECONCILE_EVERY_MS) {
