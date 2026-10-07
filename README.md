@@ -71,7 +71,9 @@ attribute (1–5) that Intercom gives every conversation, rated or not.
 - It covers the conversations closed in the period in the team inboxes picked
   in Settings. Before anyone picks, those are Support: Chat, Support: Email,
   Horizon: Chat, Horizon: Email, Billing Support and Customer Success.
-- Only conversations a teammate closed count, as for CSAT. A conversation
+- Only conversations a teammate closed count, as for CSAT. Intercom lists
+  bots such as a renamed Fin as teammates too, so a closer without an inbox
+  seat counts as a bot. A conversation
   moved to another team after the close, such as an internal follow-up team,
   counts under the team it was closed in.
 - It shows how many conversations were scored out of all counted ones, the
@@ -79,7 +81,8 @@ attribute (1–5) that Intercom gives every conversation, rated or not.
   avg 4.02"). Intercom only scores a closed chat or email conversation with
   at least two customer and two teammate or chatbot replies and enough to go
   on, so many short conversations, often emails, never get a score. The
-  average rests on the scored ones only.
+  average rests on the scored ones only. A team with fewer than 5 scored
+  conversations shows "too few for an average".
 - The Overview reuses a result for up to 15 minutes and shows its time. If
   Intercom can't be reached, the weekly report still goes out, with a note.
 

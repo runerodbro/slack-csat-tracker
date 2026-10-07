@@ -3,8 +3,10 @@
 // Intercom scores every conversation (the "CX Score rating" conversation
 // attribute, 1–5), rated or not. This counts the conversations closed in a
 // period in the team inboxes picked in Settings:
-// - only conversations a teammate closed (the same rule as CSAT); no known
-//   closer counts as a teammate;
+// - only conversations a teammate closed; no known closer counts as a
+//   teammate. The search results only name the closer, and Intercom lists
+//   bots such as a renamed Fin ("Buddy") as admins too, so a closer that is
+//   not an admin or has no inbox seat counts as a bot;
 // - a conversation moved to another team after the close (for example to the
 //   internal follow-up team after a negative rating) counts under the team it
 //   was closed in;
@@ -43,7 +45,10 @@ function createCx({ intercom, prefs, log = console }) {
 
     for await (let conv of intercom.searchClosed(start, end)) {
       const closer = conv.statistics?.last_closed_by_id;
-      if (closer != null && !(await intercom.getAdmin(closer))) continue; // Fin, a bot or a workflow
+      if (closer != null) {
+        const admin = await intercom.getAdmin(closer);
+        if (!admin || admin.has_inbox_seat === false) continue; // Fin, a bot or a workflow
+      }
 
       let team = conv.team_assignee_id == null ? null : String(conv.team_assignee_id);
       if (!selected.has(team)) {

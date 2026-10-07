@@ -25,7 +25,12 @@ function setup() {
     state.calls.push({ path: u.pathname, body });
     const json = (data) => ({ ok: true, status: 200, json: async () => data, text: async () => "" });
     if (u.host === "intercom.test") {
-      if (u.pathname === "/admins") return json({ admins: [{ id: 7, name: "Ann", email: "ann@x.io" }] });
+      if (u.pathname === "/admins") {
+        return json({ admins: [
+          { id: 7, name: "Ann", email: "ann@x.io", has_inbox_seat: true },
+          { id: 555, name: "Buddy", email: "buddy@x.io", has_inbox_seat: false },
+        ] });
+      }
       if (u.pathname === "/teams") return json({ teams: [{ id: 11, name: "Billing" }, { id: 12, name: "Product A" }, { id: 13, name: "Support: Chat" }, { id: 99, name: "Support: Feedback" }] });
       if (u.pathname.startsWith("/contacts/")) return json({ name: "Cy", email: "cy@example.com" });
       if (u.pathname === "/conversations/search") {
@@ -596,7 +601,8 @@ test("CX Score: teammate closes in the picked teams, a moved conversation counts
   state.closed = [
     closed("c1", 13, 7, 5),
     closed("c2", 13, 7, 3),
-    closed("c3", 13, 555, 1), // closed by a bot: left out
+    closed("c3", 13, 555, 1), // closed by Buddy, an admin without an inbox seat: left out
+    closed("c7", 13, 999, 1), // closer not in the admin list: left out
     closed("c4", 99, 7, 2), // moved to the feedback team after the close
     closed("c5", 13, 7, null), // not scored yet
     closed("c6", 11, 7, 5), // Billing: not picked by default
@@ -617,7 +623,7 @@ test("CX Score: teammate closes in the picked teams, a moved conversation counts
   assert.deepEqual(stats.cx.teams.map((t) => [t.name, t.count, t.total]), [["Support: Chat", 3, 4]]);
   assert.equal(stats.cx.average.toFixed(2), "3.33");
   const report = JSON.stringify(posts().at(-1).body);
-  assert.match(report, /CX Score\* 🧭\\n3 of 4 scored · avg 3\.33 \/ 5\\n\*Support Chat\*: 3 of 4 scored · avg 3\.33/);
+  assert.match(report, /CX Score\* 🧭\\n3 of 4 scored · avg 3\.33 \/ 5\\n\*Support Chat\*: 3 of 4 scored · too few for an average/);
   assert.doesNotMatch(report, /not scored/);
 
   // Picking Billing too in Settings adds it.

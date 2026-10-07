@@ -27,6 +27,7 @@ const SCORES = {
 };
 
 const MAX_COMMENT = 1500;
+const CX_MIN_SCORED = 5;
 
 function escape(text) {
   return String(text).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
@@ -233,10 +234,18 @@ function pct(share) {
 function cxBlocks(cx, asOf = null) {
   const title = "*CX Score* 🧭";
   if (cx.error) return [{ type: "section", text: { type: "mrkdwn", text: `${title}\nCould not be loaded this time.` } }];
-  // "12 of 61 scored": Intercom only scores conversations with enough back-and-forth.
-  const scored = (t) => `${t.count} of ${t.total} scored${t.count ? ` · avg ${t.average.toFixed(2)}` : ""}`;
+  // "12 of 61 scored": Intercom only scores conversations with enough
+  // back-and-forth. A team with fewer than CX_MIN_SCORED scored conversations
+  // gets no average: one conversation would move it by a whole point.
+  const scored = (t, min) => {
+    const avg = t.count >= min ? ` · avg ${t.average.toFixed(2)}` : t.count ? " · too few for an average" : "";
+    return `${t.count} of ${t.total} scored${avg}`;
+  };
   const lines = cx.total
-    ? [`${scored(cx)}${cx.count ? " / 5" : ""}`, ...cx.teams.map((t) => `*${escape(teamLabel(t.name))}*: ${scored(t)}`)]
+    ? [
+        `${scored(cx, 1)}${cx.count ? " / 5" : ""}`,
+        ...cx.teams.map((t) => `*${escape(teamLabel(t.name))}*: ${scored(t, CX_MIN_SCORED)}`),
+      ]
     : ["No conversations closed yet."];
   const notes = ["Conversations closed by a teammate in the picked team inboxes, rated or not"];
   if (asOf) notes.push(`as of ${asOf}`);
