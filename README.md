@@ -85,7 +85,9 @@ attribute (1–5) that Intercom gives every conversation, rated or not.
   and enough to go on, so many short conversations, often emails, never get a
   score. A team with fewer than 5 scored conversations shows "too few for a
   score".
-- The Overview reuses a result for up to 15 minutes and shows its time. If
+- The Overview reuses a result for up to 15 minutes and shows its time.
+  Without one, the Overview appears at once with "CX Score: Loading…" and
+  fills it in a few seconds later. If
   Intercom can't be reached, the weekly report still goes out, with a note.
 
 ### Human ratings only
