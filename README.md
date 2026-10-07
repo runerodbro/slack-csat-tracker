@@ -98,11 +98,31 @@ adds the topic to the post once.
 Every hour the app asks Intercom for ratings from the last 3 days and
 processes any that did not arrive.
 
+### Home tab
+
+Open the app in Slack to see its Home tab, with two buttons:
+
+- **Overview**, for everyone: the streak, the record and when the streak
+  started; this week so far (ratings, average, % positive, the split per
+  score, per team inbox, and ratings closed by bots); the posting channel and
+  the schedule. A dropdown sends a preview of any post to the app's Messages
+  tab, with the same data as `/csat preview`.
+- **Settings**: the posting channel and the app admins. Workspace admins and
+  owners and the app admins can change them; everyone else sees them
+  read-only.
+  - Picking a new posting channel works like `/csat here`: the app posts a
+    confirmation there. If the bot is not in the channel, nothing changes.
+  - App admins can change settings and use `/csat here`. They can also add or
+    remove app admins.
+
+The Home tab is drawn again every time someone opens it, so the numbers are
+current.
+
 ### `/csat` slash command
 
 | Command | What it does |
 |---|---|
-| `/csat here` | Posts go to this channel from now on. Only workspace admins and owners, or people in `SLACK_ADMIN_USER_IDS`. The bot must be in the channel; it posts a visible confirmation there. |
+| `/csat here` | Posts go to this channel from now on. Only workspace admins and owners, and the app admins. The bot must be in the channel; it posts a visible confirmation there. |
 | `/csat status` | Shows the posting channel, who set it, the streak and the schedule. |
 | `/csat preview` | Shows the streak post, with the list of previews under it. |
 | `/csat preview <post>` | Shows any post, see below. Anyone can use it. |
@@ -168,7 +188,7 @@ An app with a bot token and these scopes:
 | Scope | For |
 |---|---|
 | `chat:write` | Posting (required) |
-| `users:read`, `users:read.email` | @mentions and the admin check for `/csat here` |
+| `users:read`, `users:read.email` | @mentions and the admin check for `/csat here` and Settings |
 | `reactions:write` | The celebration reactions |
 | `commands` | `/csat` |
 
@@ -176,7 +196,16 @@ Missing optional scopes are skipped quietly. Invite the bot to the channel.
 
 For `/csat`, create the slash command with the Request URL
 `<app URL>/slack/commands`, and set `SLACK_SIGNING_SECRET` (Basic Information
-→ App Credentials → Signing Secret). Without it the command is off.
+→ App Credentials → Signing Secret). Without it the command and the Home tab
+are off.
+
+For the Home tab:
+
+| Slack app page | Setting |
+|---|---|
+| App Home | Turn on the Home Tab and the Messages Tab. |
+| Event Subscriptions | Turn on, Request URL `<app URL>/slack/events`, bot event `app_home_opened`. |
+| Interactivity & Shortcuts | Turn on, Request URL `<app URL>/slack/interactions`. |
 
 ### Settings
 
@@ -189,7 +218,7 @@ Copy `.env.example` to `.env` and fill it in.
 | `SLACK_CHANNEL_ID` | Required. The default channel; `/csat here` overrides it. |
 | `DB_PATH` | Where the database file is saved. |
 | `SLACK_SIGNING_SECRET` | Turns on `/csat`. |
-| `SLACK_ADMIN_USER_IDS` | Slack user IDs who may run `/csat here`, besides workspace admins and owners. |
+| `SLACK_ADMIN_USER_IDS` | Slack user IDs who are always app admins, besides the ones picked in Settings. |
 | `STREAK_START_DATE` | The first day the streak and record count from. Use it to skip periods without real CSAT data; otherwise a gap in the data looks like a long streak. |
 | `TIMEZONE`, `POST_DELAY_SECONDS`, `INTERCOM_API_URL` | Optional. Defaults: Europe/Copenhagen, 300, US Intercom. |
 

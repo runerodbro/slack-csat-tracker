@@ -12,40 +12,18 @@
 const messages = require("./messages");
 const { formatDate } = require("./time");
 const { POSTS } = require("./previews");
+const { CHANNEL_KEY, changeChannel } = require("./channels");
 
-const CHANNEL_KEY = "slack_channel";
-
-function createCommands({ slack, settings, ratings, previews, clock, config, log = console }) {
+function createCommands({ slack, settings, ratings, previews, access, clock, config, log = console }) {
   const reply = (text) => ({ response_type: "ephemeral", text });
 
-  async function isAllowed(userId) {
-    if (config.slack.adminUserIds.includes(userId)) return true;
-    try {
-      const user = await slack.userInfo(userId);
-      return Boolean(user.is_admin || user.is_owner || user.is_primary_owner);
-    } catch (err) {
-      log.warn(err.message);
-      return false;
-    }
-  }
-
   async function here({ user_id, channel_id }) {
-    if (!(await isAllowed(user_id))) {
-      return reply("Only Slack workspace admins and owners can change the CSAT channel.");
+    if (!(await access.canEdit(user_id))) {
+      return reply("Only Slack workspace admins and owners, and the app admins, can change the CSAT channel.");
     }
-    try {
-      await slack.post(
-        { text: `✅ CSAT posts go to this channel from now on. Changed by <@${user_id}>.` },
-        channel_id,
-      );
-    } catch (err) {
-      if (/not_in_channel|channel_not_found/.test(err.message)) {
-        return reply("I'm not in this channel yet. Invite me first with `/invite @CSAT Streak Counter`, then run `/csat here` again.");
-      }
-      throw err;
+    if ((await changeChannel({ slack, settings, log }, channel_id, user_id)) === "not_in_channel") {
+      return reply("I'm not in this channel yet. Invite me first with `/invite @CSAT Streak Counter`, then run `/csat here` again.");
     }
-    settings.set(CHANNEL_KEY, channel_id, user_id);
-    log.info(`Posting channel changed to ${channel_id} by ${user_id}`);
     return reply("Done. Ratings, the morning streak post and the weekly report now go to this channel.");
   }
 
@@ -83,6 +61,7 @@ function createCommands({ slack, settings, ratings, previews, clock, config, log
     return reply(
       "*CSAT commands*\n" +
         "`/csat here`: post in this channel from now on (admins only)\n" +
+        "Open the app's *Home* tab for the overview and settings.\n" +
         "`/csat status`: show the posting channel and the streak\n" +
         "`/csat preview`: show the streak post and the list of previews, only to you\n" +
         "`/csat preview <post>`: show any post with real data, only to you\n" +

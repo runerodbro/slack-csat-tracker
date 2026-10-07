@@ -287,4 +287,4 @@ function weeklyMessage({ stats, from, to }) {
   return { text: `Weekly CSAT report: ${stats.total} ratings, average ${stats.average.toFixed(2)}`, blocks };
 }
 
-module.exports = { ratingMessage, streakMessage, breakMessage, restoredMessage, weeklyMessage, escape };
+module.exports = { ratingMessage, streakMessage, breakMessage, restoredMessage, weeklyMessage, escape, teamLabel, recordText, sinceText, pct, SCORES };

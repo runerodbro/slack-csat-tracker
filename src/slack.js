@@ -69,6 +69,7 @@ function createSlack({ token, getChannel, apiUrl, log = console }) {
     react,
     post,
     update: (ts, message, channel) => call("chat.update", { channel: channel || getChannel(), ts, ...message }),
+    publishView: (userId, view) => call("views.publish", { user_id: userId, view }),
     userIdByEmail,
     userInfo,
   };
