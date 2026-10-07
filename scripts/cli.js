@@ -48,7 +48,7 @@ async function main() {
       break;
     }
     case "classify": {
-      console.log("Checking who closed each saved rating...");
+      console.log("Checking who closed each saved rating and its team inbox...");
       const counts = await app.jobs.classify({
         onProgress: (c) => console.log(`  ${c.checked}/${c.total} checked: ${c.human} human, ${c.bot} bot, ${c.unknown} unknown`),
       });
