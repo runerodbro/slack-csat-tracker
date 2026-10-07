@@ -45,16 +45,30 @@ test("streak message: positive wording, start date and record range start the da
   assert.match(json, /310 days \(7 Feb 2023 – 13 Dec 2023\)/);
 });
 
-test("rating message: team line only when the team is known", () => {
+test("rating message: team on the assignee line only when the team is known", () => {
   const withTeam = ratingMessage({ rating: { ...rating, score: 5, team_name: "Billing <EU>" }, url: "u" });
-  assert.match(withTeam.attachments[0].blocks[0].text.text, /• \*Customer:\* .*\n• \*Team:\* Billing &lt;EU&gt;\n• \*Comment:\*/);
+  assert.match(withTeam.attachments[0].blocks[0].text.text, /• \*Assignee:\* Ann · Billing &lt;EU&gt;\n• \*Customer:\*/);
   const without = ratingMessage({ rating: { ...rating, score: 5 }, url: "u" });
-  assert.doesNotMatch(without.attachments[0].blocks[0].text.text, /Team/);
+  assert.match(without.attachments[0].blocks[0].text.text, /• \*Assignee:\* Ann\n/);
+});
+
+test("rating message: topic line as Category › Product Area · Outcome, leaving out what is not set", () => {
+  const text = (fields) => ratingMessage({ rating: { ...rating, ...fields }, url: "u" }).attachments[0].blocks[0].text.text;
+  assert.match(
+    text({ category: "Bug / Troubleshooting", product_area: "Aliases", outcome: "Solved for the customer 🎉" }),
+    /\n• \*Topic:\* Bug \/ Troubleshooting › Aliases · Solved for the customer 🎉\n• \*Comment:\*/,
+  );
+  assert.match(text({ category: "Billing", outcome: "Refund <given>" }), /• \*Topic:\* Billing · Refund &lt;given&gt;\n/);
+  assert.match(text({ product_area: "PDF Processing" }), /• \*Topic:\* PDF Processing\n/);
+  assert.doesNotMatch(text({}), /Topic/);
 });
 
 test("rating message: never more than 5 lines, so Slack does not fold it", () => {
   const full = ratingMessage({
-    rating: { ...rating, team_name: "Support: Chat", remark: "Line one\nline two" },
+    rating: {
+      ...rating, team_name: "Support: Chat", remark: "Line one\nline two",
+      category: "General Use / Best Practices", product_area: "PDF Processing", outcome: "Solved with user education 🧑‍🏫",
+    },
     url: "u", assigneeSlackId: "U1", change: { from: 5 },
   });
   const lines = full.attachments[0].blocks[0].text.text.split("\n");

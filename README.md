@@ -8,10 +8,21 @@ positive ratings, celebrates records, and sends a weekly report.
 ### Rating posts
 
 Each rating (1–5) is posted to Slack 5 minutes after it arrives, as a compact
-list: a heading with the rating emoji that links to the conversation, then the
-assignee (@mention when the email matches a Slack user), customer, the team
-inbox the conversation was closed in, and the comment if there is one. The post stays
-at 5 lines at most, because Slack folds longer posts behind "Show more".
+list:
+
+```
+😃 Conversation rated
+• Assignee: @Jane · Support Chat
+• Customer: Name (email)
+• Topic: Bug / Troubleshooting › Aliases · Solved for the customer 🎉
+• Comment: "…"
+```
+
+The heading links to the conversation. The assignee is an @mention when the
+email matches a Slack user, followed by the team inbox the conversation was
+closed in. The topic and comment lines show only when there is something in
+them. The post stays at 5 lines at most, because Slack folds longer posts
+behind "Show more".
 
 - If the customer changes the rating within the 5 minutes, only the final
   rating is posted.
@@ -69,6 +80,17 @@ negative ratings to an internal follow-up team, does not change it. Without a
 team assignment in the history, the conversation's current team is used. In
 Slack, colons in team names are shown as spaces ("Support: Chat" →
 "Support Chat").
+
+### Topic
+
+The topic comes from the conversation attributes Category, Product Area and
+Outcome, in this order: Category › Product Area · Outcome. An attribute
+matches with or without a suffix in brackets, so "Category (Support)" and
+"Product Area (Horizon)" count. If several match, the first filled one is
+used. Values that are not set are left out.
+
+If Intercom sets the attributes after the post went out, the hourly check
+adds the topic to the post once.
 
 ### Missed ratings
 
@@ -167,7 +189,7 @@ node --env-file=.env scripts/cli.js <command>
 | Command | What it does |
 |---|---|
 | `backfill [days]` | Imports ratings from the last N days (default 365) without Slack posts. Safe to run again. |
-| `classify` | Fills in who closed each saved rating and its team inbox, where missing. Add `--recheck-teams` to work out every rating's team again. Safe to run again. |
+| `classify` | Fills in who closed each saved rating, its team inbox and its topic, where the closer or team is missing. Add `--recheck-teams` to work out every rating's team and topic again. Safe to run again. |
 | `streak` | Prints the streak and record. No post. |
 | `morning` | Posts the streak now. A test run does not use up a celebration. Add `--celebrate` to preview the celebration. |
 | `weekly [YYYY-MM-DD]` | Posts the weekly report for the Friday given, by default the last one. |

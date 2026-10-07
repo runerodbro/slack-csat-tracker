@@ -3,6 +3,7 @@
 const { nowSeconds, addDays } = require("./time");
 const { celebrationFor } = require("./celebrate");
 const { closedBy, COUNTS_SQL } = require("./closer");
+const { topicFields } = require("./topic");
 const { weeklyStats } = require("./report");
 const messages = require("./messages");
 
@@ -20,7 +21,8 @@ function createJobs({ db, intercom, slack, clock, ratings, queue, log = console 
   const unclassified = db.prepare("SELECT conversation_id FROM ratings WHERE closed_by IS NULL OR team_id IS NULL");
   const allRatings = db.prepare("SELECT conversation_id FROM ratings");
   const setClassified = db.prepare(
-    "UPDATE ratings SET closed_by = ?, team_id = ?, team_name = ? WHERE conversation_id = ?",
+    `UPDATE ratings SET closed_by = ?, team_id = ?, team_name = ?, category = ?, product_area = ?, outcome = ?
+     WHERE conversation_id = ?`,
   );
   const getRating = db.prepare("SELECT score, remark FROM ratings WHERE conversation_id = ?");
 
@@ -95,17 +97,22 @@ function createJobs({ db, intercom, slack, clock, ratings, queue, log = console 
     return stats;
   }
 
-  // Finds ratings the webhook missed or changes it did not report.
+  // Finds ratings the webhook missed or changes it did not report, and fills
+  // in topics Intercom set after the post.
   async function reconcile({ days = RECONCILE_DAYS } = {}) {
     const now = nowSeconds();
     let found = 0;
+    let topics = 0;
     for await (let conv of intercom.searchRated(now - days * 86400)) {
       if (conv.conversation_rating === undefined) conv = await intercom.getConversation(conv.id);
       const r = conv.conversation_rating;
       if (!r || r.rating == null) continue;
       const row = getRating.get(String(conv.id));
-      if (row && row.score === Number(r.rating) && (row.remark || null) === (r.remark || null)) continue;
       if (queue.has(conv.id)) continue;
+      if (row && row.score === Number(r.rating) && (row.remark || null) === (r.remark || null)) {
+        if (await ratings.refreshTopic(conv)) topics++;
+        continue;
+      }
       found++;
       if (!row && (r.created_at || 0) < now - LATE_POST_LIMIT) {
         await ratings.processConversation(conv.id, { conversation: conv, post: false });
@@ -114,6 +121,7 @@ function createJobs({ db, intercom, slack, clock, ratings, queue, log = console 
       }
     }
     if (found) log.info(`Reconcile: ${found} new or changed ratings`);
+    if (topics) log.info(`Reconcile: topic added to ${topics} rating posts`);
     return found;
   }
 
@@ -133,8 +141,9 @@ function createJobs({ db, intercom, slack, clock, ratings, queue, log = console 
     return saved;
   }
 
-  // Fills in who closed each saved rating and its team inbox, where missing.
-  // recheckTeams: work out the team again for every saved rating.
+  // Fills in who closed each saved rating, its team inbox and its topic, where
+  // the closer or team is missing.
+  // recheckTeams: work out the team and topic again for every saved rating.
   async function classify({ onProgress = () => {}, recheckTeams = false } = {}) {
     const counts = { human: 0, bot: 0, unknown: 0, failed: 0 };
     const teams = {};
@@ -144,7 +153,9 @@ function createJobs({ db, intercom, slack, clock, ratings, queue, log = console 
         const conv = await intercom.getConversation(row.conversation_id);
         const closer = closedBy(conv) ?? "unknown";
         const team = await ratings.teamFields(conv);
-        setClassified.run(closer, team.team_id, team.team_name, row.conversation_id);
+        const topic = topicFields(conv);
+        setClassified.run(closer, team.team_id, team.team_name, topic.category, topic.product_area, topic.outcome,
+          row.conversation_id);
         counts[closer]++;
         const label = team.team_name || (team.team_id === "none" ? "No team" : `Team ${team.team_id}`);
         teams[label] = (teams[label] || 0) + 1;
