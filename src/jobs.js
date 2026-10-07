@@ -18,6 +18,7 @@ function createJobs({ db, intercom, slack, clock, ratings, queue, log = console 
     "SELECT COUNT(*) AS count, AVG(score) AS average FROM ratings WHERE rated_at >= ? AND rated_at < ? AND closed_by = 'bot'",
   );
   const unclassified = db.prepare("SELECT conversation_id FROM ratings WHERE closed_by IS NULL OR team_id IS NULL");
+  const allRatings = db.prepare("SELECT conversation_id FROM ratings");
   const setClassified = db.prepare(
     "UPDATE ratings SET closed_by = ?, team_id = ?, team_name = ? WHERE conversation_id = ?",
   );
@@ -133,10 +134,11 @@ function createJobs({ db, intercom, slack, clock, ratings, queue, log = console 
   }
 
   // Fills in who closed each saved rating and its team inbox, where missing.
-  async function classify({ onProgress = () => {} } = {}) {
+  // recheckTeams: work out the team again for every saved rating.
+  async function classify({ onProgress = () => {}, recheckTeams = false } = {}) {
     const counts = { human: 0, bot: 0, unknown: 0, failed: 0 };
     const teams = {};
-    const rows = unclassified.all();
+    const rows = recheckTeams ? allRatings.all() : unclassified.all();
     for (const [i, row] of rows.entries()) {
       try {
         const conv = await intercom.getConversation(row.conversation_id);

@@ -10,7 +10,7 @@ positive ratings, celebrates records, and sends a weekly report.
 Each rating (1–5) is posted to Slack 5 minutes after it arrives, as a compact
 list: a heading with the rating emoji that links to the conversation, then the
 assignee (@mention when the email matches a Slack user), customer, the team
-inbox the conversation is in, and the comment if there is one. The post stays
+inbox the conversation was closed in, and the comment if there is one. The post stays
 at 5 lines at most, because Slack folds longer posts behind "Show more".
 
 - If the customer changes the rating within the 5 minutes, only the final
@@ -60,6 +60,15 @@ asks for the rating at that close. The last close before the rating decides:
   Slack post, and left out of the streak, record, celebration and weekly
   numbers. The weekly report shows these ratings on one separate line.
 - No close found: counts as human.
+
+### Team inbox
+
+The team is the inbox the conversation was closed in: the last team it was
+assigned to before the close. A move afterwards, such as a workflow that sends
+negative ratings to an internal follow-up team, does not change it. Without a
+team assignment in the history, the conversation's current team is used. In
+Slack, colons in team names are shown as spaces ("Support: Chat" →
+"Support Chat").
 
 ### Missed ratings
 
@@ -158,7 +167,7 @@ node --env-file=.env scripts/cli.js <command>
 | Command | What it does |
 |---|---|
 | `backfill [days]` | Imports ratings from the last N days (default 365) without Slack posts. Safe to run again. |
-| `classify` | Fills in who closed each saved rating and its team inbox, where missing. Safe to run again. |
+| `classify` | Fills in who closed each saved rating and its team inbox, where missing. Add `--recheck-teams` to work out every rating's team again. Safe to run again. |
 | `streak` | Prints the streak and record. No post. |
 | `morning` | Posts the streak now. A test run does not use up a celebration. Add `--celebrate` to preview the celebration. |
 | `weekly [YYYY-MM-DD]` | Posts the weekly report for the Friday given, by default the last one. |

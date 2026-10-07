@@ -32,6 +32,12 @@ function escape(text) {
   return String(text).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 
+// Team inbox names as shown in Slack: "Support: Chat" reads oddly after
+// "Team:", so colons become spaces ("Support Chat").
+function teamLabel(name) {
+  return String(name).replace(/\s*:\s*/g, " ").trim();
+}
+
 function days(n) {
   return `${n} ${n === 1 ? "day" : "days"}`;
 }
@@ -74,7 +80,7 @@ function ratingMessage({ rating, url, assigneeSlackId, change }) {
     `• *Assignee:* ${assignee}`,
     `• *Customer:* ${customer}`,
   ];
-  if (rating.team_name) lines.push(`• *Team:* ${escape(rating.team_name)}`);
+  if (rating.team_name) lines.push(`• *Team:* ${escape(teamLabel(rating.team_name))}`);
   if (rating.remark) {
     let comment = escape(rating.remark).replace(/\s*\n\s*/g, " ");
     if (comment.length > MAX_COMMENT) comment = `${comment.slice(0, MAX_COMMENT)}…`;
@@ -255,7 +261,7 @@ function weeklyMessage({ stats, from, to }) {
     const teams = stats.teams
       .map(
         (t) =>
-          `*${escape(t.name)}*: ${t.count} ${t.count === 1 ? "rating" : "ratings"} · avg ${t.average.toFixed(2)} · ${pct(t.positiveShare)} positive`,
+          `*${escape(teamLabel(t.name))}*: ${t.count} ${t.count === 1 ? "rating" : "ratings"} · avg ${t.average.toFixed(2)} · ${pct(t.positiveShare)} positive`,
       )
       .join("\n");
     blocks.push({ type: "section", text: { type: "mrkdwn", text: `*By team inbox*\n${teams}` } });
