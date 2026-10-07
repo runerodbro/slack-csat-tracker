@@ -490,3 +490,91 @@ test("Slack events and interactions routes: URL check, Home tab on open, signatu
   assert.match(JSON.stringify(state.calls.filter((c) => c.path === "/views.publish").at(-1).body), /Posting channel/);
   server.close();
 });
+
+test("rating filter: main channel only, judged on the current rating; existing posts always updated", async () => {
+  const { app, state } = setup();
+  const now = Math.floor(Date.now() / 1000);
+  const posts = () => state.calls.filter((c) => c.path === "/chat.postMessage");
+  app.prefs.set({ scores: [5], positiveNeedsComment: true }, "UADMIN");
+
+  state.rating = rating(4, now);
+  assert.equal(await app.ratings.processConversation("120"), "saved (no post: settings)");
+  state.rating = rating(5, now);
+  assert.equal(await app.ratings.processConversation("120"), "saved (no post: settings)", "a 5 without comment");
+  state.rating = { ...rating(5, now), remark: "Great help" };
+  assert.equal(await app.ratings.processConversation("120"), "posted", "posted once it passes");
+  assert.equal(posts().length, 1);
+
+  // A later change that the filter would hide still updates the post.
+  state.rating = { ...rating(3, now), remark: "Great help" };
+  assert.equal(await app.ratings.processConversation("120"), "updated");
+  assert.match(textOf(posts().at(-1).body), /Streak has been broken/, "break posts are a separate switch");
+});
+
+test("1–3 channel: every 1–3 rating and break post also goes there, copies are updated", async () => {
+  const { app, state } = setup();
+  const now = Math.floor(Date.now() / 1000);
+  const posts = () => state.calls.filter((c) => c.path === "/chat.postMessage");
+  const updates = () => state.calls.filter((c) => c.path === "/chat.update");
+  app.settings.set("negative_channel", "CNEG", "UADMIN");
+  app.prefs.set({ ratings: false, breaks: false }, "UADMIN");
+
+  // Rating and break posts are off in the main channel; the 1–3 channel still gets both.
+  state.rating = { ...rating(2, now), remark: "Slow" };
+  assert.equal(await app.ratings.processConversation("130"), "posted");
+  assert.deepEqual(posts().map((c) => c.body.channel), ["CNEG", "CNEG"]);
+  assert.match(textOf(posts()[1].body), /Streak has been broken/);
+
+  // Changed to positive: the copy and the break post are updated.
+  state.rating = { ...rating(5, now), remark: "Slow" };
+  assert.equal(await app.ratings.processConversation("130"), "updated");
+  assert.deepEqual(updates().map((c) => c.body.channel), ["CNEG", "CNEG"]);
+  assert.match(JSON.stringify(updates()[0].body), /changed from 🙁/);
+  assert.match(JSON.stringify(updates()[1].body), /Rating changed to 5\/5/);
+
+  // With everything on: a posted 5 changed to 2 gets a new post in the 1–3 channel.
+  app.prefs.set({ ratings: true, breaks: true }, "UADMIN");
+  state.rating = rating(5, now);
+  await app.ratings.processConversation("131");
+  assert.equal(posts().at(-1).body.channel, "C1");
+  state.rating = rating(2, now);
+  await app.ratings.processConversation("131");
+  const negCopy = posts().find((c) => c.body.channel === "CNEG" && JSON.stringify(c.body).includes("changed from 🤩"));
+  assert.ok(negCopy, "new post in the 1–3 channel with the change");
+  assert.deepEqual(posts().slice(-2).map((c) => c.body.channel), ["C1", "CNEG"], "break post in both channels");
+});
+
+test("Settings: 1–3 channel, switches and filters; the same channel is refused for both", async () => {
+  const { app, state } = setup();
+  const last = () => JSON.stringify(state.calls.filter((c) => c.path === "/views.publish").at(-1).body);
+  const act = (action) => app.home.action({ type: "block_actions", user: { id: "UADMIN" }, actions: [action] });
+
+  await act({ action_id: "home_tab_settings", value: "settings" });
+  assert.match(last(), /"action_id":"negative_channel"/);
+  assert.match(last(), /"action_id":"post_switches".*"initial_options":\[\{"value":"ratings"/);
+
+  await act({ action_id: "negative_channel", selected_conversation: "C1" });
+  assert.match(last(), /<#C1> is already the posting channel/);
+  assert.equal(app.prefs.negativeChannel(), null);
+
+  await act({ action_id: "negative_channel", selected_conversation: "CNEG" });
+  assert.equal(app.prefs.negativeChannel(), "CNEG");
+  assert.match(state.calls.filter((c) => c.path === "/chat.postMessage").at(-1).body.text, /1–3 ratings and break posts also go to this channel/);
+  assert.match((await app.commands.handle({ text: "here", user_id: "UADMIN", channel_id: "CNEG" })).text, /This is the 1–3 channel/);
+  assert.equal(app.getChannel(), "C1");
+
+  await act({ action_id: "post_switches", selected_options: [{ value: "ratings" }, { value: "weekly" }] });
+  await act({ action_id: "rating_scores", selected_options: [{ value: "1" }, { value: "5" }] });
+  await act({ action_id: "comment_filters", selected_options: [{ value: "negativeNeedsComment" }] });
+  const p = app.prefs.get();
+  assert.deepEqual([p.ratings, p.morning, p.weekly, p.breaks], [true, false, true, false]);
+  assert.deepEqual(p.scores, [1, 5]);
+  assert.deepEqual([p.positiveNeedsComment, p.negativeNeedsComment], [false, true]);
+
+  await app.home.action({ type: "block_actions", user: { id: "UADMIN" }, actions: [{ action_id: "home_tab_overview", value: "overview" }] });
+  assert.match(last(), /1–3 channel\*\\n<#CNEG>/);
+  assert.match(last(), /Streak Mon–Fri 08:30 \(off\)/);
+
+  await act({ action_id: "negative_channel_clear" });
+  assert.equal(app.prefs.negativeChannel(), null);
+});

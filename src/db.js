@@ -106,6 +106,13 @@ const MIGRATIONS = [
   ALTER TABLE ratings ADD COLUMN product_area TEXT;
   ALTER TABLE ratings ADD COLUMN outcome TEXT;
   `,
+  `
+  -- The copy of a 1–3 rating post and a break post in the separate 1–3 channel.
+  ALTER TABLE ratings ADD COLUMN neg_slack_ts TEXT;
+  ALTER TABLE ratings ADD COLUMN neg_slack_channel TEXT;
+  ALTER TABLE streak_breaks ADD COLUMN neg_slack_ts TEXT;
+  ALTER TABLE streak_breaks ADD COLUMN neg_slack_channel TEXT;
+  `,
 ];
 
 function schemaVersion(db) {

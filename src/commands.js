@@ -14,15 +14,19 @@ const { formatDate } = require("./time");
 const { POSTS } = require("./previews");
 const { CHANNEL_KEY, changeChannel } = require("./channels");
 
-function createCommands({ slack, settings, ratings, previews, access, clock, config, log = console }) {
+function createCommands({ slack, settings, ratings, previews, access, getChannel, clock, config, log = console }) {
   const reply = (text) => ({ response_type: "ephemeral", text });
 
   async function here({ user_id, channel_id }) {
     if (!(await access.canEdit(user_id))) {
       return reply("Only Slack workspace admins and owners, and the app admins, can change the CSAT channel.");
     }
-    if ((await changeChannel({ slack, settings, log }, channel_id, user_id)) === "not_in_channel") {
+    const result = await changeChannel({ slack, settings, getChannel, log }, channel_id, user_id);
+    if (result === "not_in_channel") {
       return reply("I'm not in this channel yet. Invite me first with `/invite @CSAT Streak Counter`, then run `/csat here` again.");
+    }
+    if (result === "same_channel") {
+      return reply("This is the 1–3 channel. Pick another channel for the posts, or change the 1–3 channel in the app's Home tab → Settings.");
     }
     return reply("Done. Ratings, the morning streak post and the weekly report now go to this channel.");
   }

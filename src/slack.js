@@ -66,6 +66,7 @@ function createSlack({ token, getChannel, apiUrl, log = console }) {
   }
 
   return {
+    channel: () => getChannel(),
     react,
     post,
     update: (ts, message, channel) => call("chat.update", { channel: channel || getChannel(), ts, ...message }),
