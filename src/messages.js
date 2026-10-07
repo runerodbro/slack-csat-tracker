@@ -233,14 +233,12 @@ function pct(share) {
 function cxBlocks(cx, asOf = null) {
   const title = "*CX Score* 🧭";
   if (cx.error) return [{ type: "section", text: { type: "mrkdwn", text: `${title}\nCould not be loaded this time.` } }];
-  const lines = cx.count
-    ? [
-        `${cx.count} ${cx.count === 1 ? "conversation" : "conversations"} · avg ${cx.average.toFixed(2)} / 5`,
-        ...cx.teams.map((t) => `*${escape(teamLabel(t.name))}*: ${t.count} · avg ${t.average.toFixed(2)}`),
-      ]
-    : ["No scored conversations yet."];
-  const notes = ["All conversations closed by a teammate in the picked team inboxes, rated or not"];
-  if (cx.notScored) notes.push(`not scored yet: ${cx.notScored}`);
+  // "12 of 61 scored": Intercom only scores conversations with enough back-and-forth.
+  const scored = (t) => `${t.count} of ${t.total} scored${t.count ? ` · avg ${t.average.toFixed(2)}` : ""}`;
+  const lines = cx.total
+    ? [`${scored(cx)}${cx.count ? " / 5" : ""}`, ...cx.teams.map((t) => `*${escape(teamLabel(t.name))}*: ${scored(t)}`)]
+    : ["No conversations closed yet."];
+  const notes = ["Conversations closed by a teammate in the picked team inboxes, rated or not"];
   if (asOf) notes.push(`as of ${asOf}`);
   return [
     { type: "section", text: { type: "mrkdwn", text: `${title}\n${lines.join("\n")}` } },

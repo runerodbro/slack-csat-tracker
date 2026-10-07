@@ -614,12 +614,11 @@ test("CX Score: teammate closes in the picked teams, a moved conversation counts
 
   app.prefs.set({ cxScore: true }, "UADMIN");
   const stats = await app.jobs.weekly(app.jobs.lastReportFriday(now));
-  assert.deepEqual(stats.cx.teams.map((t) => [t.name, t.count]), [["Support: Chat", 3]]);
+  assert.deepEqual(stats.cx.teams.map((t) => [t.name, t.count, t.total]), [["Support: Chat", 3, 4]]);
   assert.equal(stats.cx.average.toFixed(2), "3.33");
-  assert.equal(stats.cx.notScored, 1);
   const report = JSON.stringify(posts().at(-1).body);
-  assert.match(report, /CX Score\* 🧭\\n3 conversations · avg 3\.33 \/ 5\\n\*Support Chat\*: 3 · avg 3\.33/);
-  assert.match(report, /not scored yet: 1/);
+  assert.match(report, /CX Score\* 🧭\\n3 of 4 scored · avg 3\.33 \/ 5\\n\*Support Chat\*: 3 of 4 scored · avg 3\.33/);
+  assert.doesNotMatch(report, /not scored/);
 
   // Picking Billing too in Settings adds it.
   await app.home.action({ type: "block_actions", user: { id: "UADMIN" }, actions: [{ action_id: "home_tab_settings", value: "settings" }] });
