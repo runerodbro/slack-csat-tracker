@@ -103,8 +103,27 @@ processes any that did not arrive.
 |---|---|
 | `/csat here` | Posts go to this channel from now on. Only workspace admins and owners, or people in `SLACK_ADMIN_USER_IDS`. The bot must be in the channel; it posts a visible confirmation there. |
 | `/csat status` | Shows the posting channel, who set it, the streak and the schedule. |
-| `/csat preview` | Shows the streak post, only to you. |
+| `/csat preview` | Shows the streak post, with the list of previews under it. |
+| `/csat preview <post>` | Shows any post, see below. Anyone can use it. |
 | `/csat help` | Lists the commands. |
+
+Previews show how each post looks, without waiting for it to happen. They use
+real data: the latest rating of that kind, today's streak and this week's
+numbers. Where there is no real example, they use made-up sample data. A
+preview posts nothing to the channel and uses up no celebration.
+
+| Post | Shows |
+|---|---|
+| `rating` | The latest 4–5 rating post |
+| `negative` | The latest 1–3 rating post, one with a comment if there is one |
+| `changed` | That rating as changed from 🤩 |
+| `streak` | The morning streak post |
+| `record` | The gold new record post: today's, or the day the streak beats the record |
+| `celebration` | The record celebration with the streak's numbers and top agents |
+| `milestone` | The celebration for today's or the next milestone |
+| `break` | The latest streak break post |
+| `restored` | That break post as restored |
+| `weekly` | The weekly report for this week so far |
 
 Replies are only visible to the person who typed the command. After a channel
 change, updates to older messages still happen in the channel where those

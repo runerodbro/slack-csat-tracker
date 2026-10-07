@@ -9,6 +9,7 @@ const { createQueue } = require("./queue");
 const { createJobs } = require("./jobs");
 const { createSettings } = require("./settings");
 const { createCommands, CHANNEL_KEY } = require("./commands");
+const { createPreviews } = require("./previews");
 
 // channelOverride: post everything in this channel (test runs from the CLI).
 function createApp(config, { db = open(), log = console, channelOverride = null } = {}) {
@@ -23,7 +24,8 @@ function createApp(config, { db = open(), log = console, channelOverride = null 
   const ratings = createRatings({ db, intercom, slack, clock, config, log });
   const queue = createQueue({ db, handler: (id) => ratings.processConversation(id), log });
   const jobs = createJobs({ db, intercom, slack, clock, ratings, queue, log });
-  const commands = createCommands({ slack, settings, ratings, clock, config, log });
+  const previews = createPreviews({ db, ratings, jobs, intercom, slack, clock });
+  const commands = createCommands({ slack, settings, ratings, previews, clock, config, log });
   return { db, clock, intercom, slack, settings, ratings, queue, jobs, commands, getChannel };
 }
 

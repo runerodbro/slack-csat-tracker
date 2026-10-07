@@ -2,7 +2,8 @@
 //
 //   /csat here      post in this channel from now on (admins only)
 //   /csat status    show the posting channel and the streak
-//   /csat preview   show the streak post, only to you
+//   /csat preview   show the streak post and the list of previews, only to you
+//   /csat preview <post>   show any post (see previews.js), only to you
 //   /csat help      list the commands
 //
 // Replies are ephemeral (only the person who typed the command sees them),
@@ -10,10 +11,11 @@
 
 const messages = require("./messages");
 const { formatDate } = require("./time");
+const { POSTS } = require("./previews");
 
 const CHANNEL_KEY = "slack_channel";
 
-function createCommands({ slack, settings, ratings, clock, config, log = console }) {
+function createCommands({ slack, settings, ratings, previews, clock, config, log = console }) {
   const reply = (text) => ({ response_type: "ephemeral", text });
 
   async function isAllowed(userId) {
@@ -62,8 +64,19 @@ function createCommands({ slack, settings, ratings, clock, config, log = console
     );
   }
 
-  function preview() {
-    return { response_type: "ephemeral", ...messages.streakMessage(ratings.currentStreak()) };
+  const postList = () => Object.entries(POSTS).map(([name, what]) => `\`${name}\` ${what}`).join(" · ");
+
+  // Without a post name: the streak post, with the list of previews under it.
+  async function preview(name) {
+    if (!name) {
+      const msg = messages.streakMessage(ratings.currentStreak());
+      const list = `*Preview any post:* \`/csat preview <post>\`\n${postList()}`;
+      msg.attachments.push({ fallback: list, blocks: [{ type: "context", elements: [{ type: "mrkdwn", text: list }] }] });
+      return { response_type: "ephemeral", ...msg };
+    }
+    const msg = await previews.preview(name);
+    if (!msg) return reply(`I don't know the post \`${name}\`. Pick one of these:\n${postList()}`);
+    return { response_type: "ephemeral", ...msg };
   }
 
   function help() {
@@ -71,21 +84,22 @@ function createCommands({ slack, settings, ratings, clock, config, log = console
       "*CSAT commands*\n" +
         "`/csat here`: post in this channel from now on (admins only)\n" +
         "`/csat status`: show the posting channel and the streak\n" +
-        "`/csat preview`: show the streak post, only to you\n" +
+        "`/csat preview`: show the streak post and the list of previews, only to you\n" +
+        "`/csat preview <post>`: show any post with real data, only to you\n" +
         "`/csat help`: this list",
     );
   }
 
   // params: the form fields Slack sends (command, text, user_id, channel_id, ...).
   async function handle(params) {
-    const sub = (params.text || "").trim().split(/\s+/)[0].toLowerCase();
+    const [sub, arg] = (params.text || "").trim().toLowerCase().split(/\s+/);
     switch (sub) {
       case "here":
         return here(params);
       case "status":
         return status();
       case "preview":
-        return preview();
+        return preview(arg);
       default:
         return help();
     }

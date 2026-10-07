@@ -370,3 +370,39 @@ test("topic: shown on the rating post, saved, and added to the post once when In
   await app.jobs.reconcile();
   assert.equal(slackCalls().length, before + 1, "updated once");
 });
+
+test("/csat preview: every post, with sample data on an empty database and real data after ratings", async () => {
+  const { app, state } = setup();
+  const { POSTS } = require("../src/previews");
+  const show = async (name) => {
+    const r = await app.commands.handle({ text: `preview ${name}`, user_id: "UNOBODY" });
+    assert.equal(r.response_type, "ephemeral", name);
+    return JSON.stringify(r);
+  };
+
+  for (const name of Object.keys(POSTS)) assert.ok((await show(name)).length > 50, name);
+  assert.match(await show("rating"), /Sample Agent/);
+  assert.match(await show("milestone"), /🎉 \d+ days of 100% positive ratings!.*Today: \d+ days/);
+  assert.match(await show("celebration"), /NEW RECORD.*During this streak.*Sample Agent \(40\)/);
+  assert.match(await show("nonsense"), /I don't know the post `nonsense`/);
+
+  // A bare preview: the streak post with the list under it.
+  const bare = await app.commands.handle({ text: "preview" });
+  assert.equal(bare.attachments.length, 2);
+  assert.match(bare.attachments[1].blocks[0].elements[0].text, /`weekly` weekly report, this week so far/);
+
+  const now = Math.floor(Date.now() / 1000);
+  state.rating = rating(5, now - 60);
+  await app.ratings.processConversation("100");
+  state.rating = { ...rating(2, now), remark: "Too slow" };
+  await app.ratings.processConversation("101");
+  const posted = state.calls.filter((c) => c.path === "/chat.postMessage").length;
+  assert.match(await show("rating"), /<@UANN>/);
+  assert.match(await show("negative"), /Too slow/);
+  assert.match(await show("changed"), /changed from 🤩/);
+  assert.match(await show("break"), /Streak has been broken/);
+  assert.match(await show("restored"), /Rating changed to 4\/5/);
+  assert.match(await show("weekly"), /Weekly CSAT report/);
+  for (const name of Object.keys(POSTS)) await show(name);
+  assert.equal(state.calls.filter((c) => c.path === "/chat.postMessage").length, posted, "previews post nothing to the channel");
+});
