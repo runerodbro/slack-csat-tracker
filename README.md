@@ -69,6 +69,17 @@ Wednesday morning.
     then "🏆 2 PERFECT YEARS: 730 days…";
   - a calendar year: "🏆 2026 - A PERFECT YEAR: Exclusively positive
     ratings".
+- **Agents' perfect year:** when the team didn't have a perfect calendar
+  year, the agents who did are celebrated in one post, at the same level:
+  "🏆 2026 - A PERFECT YEAR for 4 agents", with @mentions and their number of
+  ratings. An agent needs at least 30 ratings in the year and no 1–3. It goes
+  out in the first morning post from 2 January, and only in January; nothing
+  is posted when no agent qualifies. When the team had a perfect year, its own
+  post covers everyone.
+- **Agents who have left** (no longer in Intercom's teammate list with an
+  inbox seat) are never named in thanks, the weekly top agents or perfect
+  years. Their ratings still count in every number, and rating posts still
+  show who the conversation was assigned to.
 - **Streak broken:** a 1–3 rating posts "Streak has been broken 😭" after the
   5-minute delay, with how long the streak lasted and whether it beat the
   record. Only the first 1–3 rating of a day posts this.

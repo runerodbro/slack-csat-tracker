@@ -208,6 +208,24 @@ function celebrationMessage(streak, celebration, tracker = []) {
   return { text: isRecord ? `<!here> ${celebration.title}` : celebration.title, blocks };
 }
 
+// Agents with a perfect calendar year, when the team didn't have one.
+// agents: [{ name, slackId, count }], most ratings first.
+function agentsPerfectYearMessage(year, agents) {
+  const title = `🏆 ${year} - A PERFECT YEAR for ${agents.length} ${agents.length === 1 ? "agent" : "agents"}`;
+  const names = agents.map((a) => `${a.slackId ? `<@${a.slackId}>` : escape(a.name)} (${a.count})`).join(" · ");
+  return {
+    text: `<!here> ${title}`,
+    blocks: [
+      { type: "header", text: { type: "plain_text", text: title, emoji: true } },
+      {
+        type: "section",
+        text: { type: "mrkdwn", text: `<!here> 🥇\nNot one 1–3 rating in all of ${year}, with at least 30 ratings each:\n${names}` },
+      },
+      { type: "context", elements: [{ type: "mrkdwn", text: "🎊 Exclusively positive ratings. Congratulations!" }] },
+    ],
+  };
+}
+
 function recordVerdict({ length, previousRecordDays, isRecord }) {
   if (previousRecordDays == null) return "This was the first streak";
   if (isRecord) return `Yes 🏆 ${days(length)} beat the old record of ${days(previousRecordDays)}`;
@@ -345,4 +363,4 @@ function weeklyMessage({ stats, from, to }) {
   return { text: `Weekly CSAT report: ${stats.total} ratings, average ${stats.average.toFixed(2)}`, blocks };
 }
 
-module.exports = { ratingMessage, streakMessage, breakMessage, restoredMessage, weeklyMessage, cxBlocks, escape, teamLabel, recordText, sinceText, pct, SCORES };
+module.exports = { ratingMessage, streakMessage, breakMessage, restoredMessage, weeklyMessage, agentsPerfectYearMessage, cxBlocks, escape, teamLabel, recordText, sinceText, pct, SCORES };

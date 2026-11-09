@@ -33,6 +33,20 @@ function createJobs({ db, intercom, slack, clock, ratings, queue, prefs, cx, log
   );
   const NO_END = Number.MAX_SAFE_INTEGER;
 
+  // Agents who have left the company are never named in automated posts
+  // (thanks, top agents, perfect years); their ratings still count. A current
+  // teammate is in Intercom's teammate list with an inbox seat (bots like
+  // Buddy have none).
+  async function isCurrentTeammate(adminId) {
+    const admin = await intercom.getAdmin(adminId).catch(() => null);
+    return Boolean(admin) && admin.has_inbox_seat !== false;
+  }
+  async function currentOnly(agents, idOf) {
+    const kept = [];
+    for (const a of agents) if (await isCurrentTeammate(idOf(a))) kept.push(a);
+    return kept;
+  }
+
   // allAgents: thank every agent (a record), not only the top 5.
   // until: count only ratings before this time (a streak that is ending).
   async function streakStats(since, { allAgents = false, until = NO_END } = {}) {
@@ -41,11 +55,14 @@ function createJobs({ db, intercom, slack, clock, ratings, queue, prefs, cx, log
     // Only real agents get thanks; ratings without one still count in the totals.
     for (const r of rows) {
       if (!r.admin_id) continue;
-      const a = agents.get(r.admin_id) || { name: r.admin_name || "Unknown agent", email: r.admin_email, count: 0 };
+      const a = agents.get(r.admin_id) || { id: r.admin_id, name: r.admin_name || "Unknown agent", email: r.admin_email, count: 0 };
       a.count++;
       agents.set(r.admin_id, a);
     }
-    const sorted = [...agents.values()].sort((a, b) => b.count - a.count || a.name.localeCompare(b.name));
+    const sorted = await currentOnly(
+      [...agents.values()].sort((a, b) => b.count - a.count || a.name.localeCompare(b.name)),
+      (a) => a.id,
+    );
     const top = allAgents ? sorted : sorted.slice(0, 5);
     for (const a of top) a.slackId = await slack.userIdByEmail(a.email);
     return {
@@ -85,7 +102,51 @@ function createJobs({ db, intercom, slack, clock, ratings, queue, prefs, cx, log
       for (const name of REACTIONS[due.kind]) await slack.react(posted.ts, name, posted.channel);
       if (remember) for (const key of due.keys) markCelebrated.run(key);
     }
-    return { ...streak, ratingsInRow, celebration: due?.title || null };
+    const agents = await agentsPerfectYear(today, { remember });
+    return { ...streak, ratingsInRow, celebration: due?.title || null, perfectAgents: agents?.length || 0 };
+  }
+
+  // Agents with a perfect calendar year: no 1–3 rating and at least 30
+  // ratings that count, still teammates in Intercom. Celebrated in one post,
+  // record-level, in the first morning post from 2 January (up to 31 January), only when the
+  // team didn't have a perfect year (that post already thanks everyone).
+  const AGENT_MIN_RATINGS = 30;
+  const agentYearRows = db.prepare(`
+    SELECT admin_id, MAX(admin_name) AS name, MAX(admin_email) AS email, COUNT(*) AS count, SUM(score <= 3) AS negative
+    FROM ratings WHERE admin_id IS NOT NULL AND rated_at >= ? AND rated_at < ? AND ${COUNTS_SQL}
+    GROUP BY admin_id`);
+  const yearNegatives = db.prepare(`SELECT COUNT(*) AS n FROM ratings WHERE score <= 3 AND rated_at >= ? AND rated_at < ? AND ${COUNTS_SQL}`);
+
+  async function agentsPerfectYear(today, { remember = true } = {}) {
+    const year = Number(today.slice(0, 4)) - 1;
+    const key = `agents:${year}`;
+    // Only in January: a year isn't celebrated months later (also not 2025 at the first deploy).
+    if (today < `${year + 1}-01-02` || today > `${year + 1}-01-31`) return null;
+    const celebrated = new Set(celebratedKeys.all().map((r) => r.run_key));
+    if (celebrated.has(key)) return null;
+    const mark = () => { if (remember) markCelebrated.run(key); };
+
+    const start = clock.epochAt(`${year}-01-01`, 0, 0);
+    const end = clock.epochAt(`${year + 1}-01-01`, 0, 0);
+    if (celebrated.has(`perfect:${year}`) || yearNegatives.get(start, end).n === 0) {
+      mark(); // the team's perfect year post covers every agent
+      return null;
+    }
+    const agents = [];
+    for (const r of agentYearRows.all(start, end)) {
+      if (r.negative > 0 || r.count < AGENT_MIN_RATINGS) continue;
+      if (!(await isCurrentTeammate(r.admin_id))) continue; // left the company
+      agents.push({ name: r.name || "Unknown agent", count: r.count, slackId: await slack.userIdByEmail(r.email) });
+    }
+    if (!agents.length) {
+      mark();
+      return null;
+    }
+    agents.sort((a, b) => b.count - a.count || a.name.localeCompare(b.name));
+    const posted = await slack.post(messages.agentsPerfectYearMessage(year, agents));
+    for (const name of SPECIAL) await slack.react(posted.ts, name, posted.channel);
+    mark();
+    return agents;
   }
 
   // Called just before a break post: posts the celebration the ending streak
@@ -122,6 +183,7 @@ function createJobs({ db, intercom, slack, clock, ratings, queue, prefs, cx, log
   // withCx: false leaves it out (the Overview adds its own cached one).
   async function weekReport(start, end, { withCx = true } = {}) {
     const stats = weeklyStats(weekRows.all(start, end));
+    stats.agents = await currentOnly(stats.agents, (a) => a.id);
     stats.bots = weekBotRows.get(start, end);
     if (withCx && prefs?.get().cxScore && cx) stats.cx = await cx.period(start, end);
     const label = (epoch) => {
