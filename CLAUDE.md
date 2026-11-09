@@ -24,6 +24,11 @@ If nothing in the wiki changes, write "None" under "Wiki update".
 - Before building, list the decisions and open questions for a change and get
   the maintainer's answer. Do not pick a default and build on it; this
   includes layout, behaviour, naming and what to leave out.
+- Show the maintainer the full text of every new or changed Slack post (and
+  other user-facing text) before building it, and build only the approved
+  wording. Keep that wording positive: say what went well, not what was
+  missing (for example "Exclusively positive feedback", not "not one 1–3
+  rating").
 - When the maintainer has to run something (deploy, CLI commands, checks on
   the server), give the full, exact command in that message, every time. Never
   refer to a command from earlier in the conversation; it can't be found again
