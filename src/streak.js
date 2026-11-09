@@ -24,14 +24,16 @@ function computeStreak({ negativeDates, startDate, today }) {
   }
 
   let record = null;
+  const history = []; // earlier streaks, for the hall of fame
   for (let i = 1; i < anchors.length; i++) {
     const length = daysBetween(anchors[i - 1], anchors[i]);
+    history.push({ length, from: anchors[i - 1], to: anchors[i] });
     if (!record || length > record.length) record = { length, from: anchors[i - 1], to: anchors[i] };
   }
 
   const since = anchors[anchors.length - 1];
   const current = daysBetween(since, today);
-  return { current, since, record, isNewRecord: Boolean(record) && current > record.length };
+  return { current, since, record, history, isNewRecord: Boolean(record) && current > record.length };
 }
 
 // Result for a negative rating on `date`. Returns null when another negative

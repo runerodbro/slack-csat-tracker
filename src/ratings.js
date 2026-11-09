@@ -105,6 +105,20 @@ function createRatings({ db, intercom, slack, clock, config, prefs, log = consol
         date: clock.localDate(row.rated_at),
       });
       if (!info) return; // Another negative rating already broke the streak today.
+      // First any celebration the ending streak still had pending (jobs.celebrateBeforeBreak).
+      if (beforeBreak) {
+        const date = clock.localDate(row.rated_at);
+        const ending = computeStreak({
+          negativeDates: negativeDates(row.conversation_id).filter((d) => d < date),
+          startDate: streakStartDate(),
+          today: date,
+        });
+        try {
+          await beforeBreak({ streak: ending, until: row.rated_at, today: date });
+        } catch (err) {
+          log.warn(`Celebration before the break: ${err.message}`);
+        }
+      }
       const details = {
         length: info.length,
         previousRecordDays: info.previousRecord ? info.previousRecord.length : null,
@@ -253,7 +267,11 @@ function createRatings({ db, intercom, slack, clock, config, prefs, log = consol
     return true;
   }
 
-  return { processConversation, currentStreak, streakStartDate, teamFields, refreshTopic };
+  // fn({ streak, until, today }): runs just before a break post.
+  let beforeBreak = null;
+  const onBeforeBreak = (fn) => { beforeBreak = fn; };
+
+  return { processConversation, currentStreak, streakStartDate, teamFields, refreshTopic, onBeforeBreak };
 }
 
 module.exports = { createRatings };

@@ -3,7 +3,7 @@
 
 const messages = require("./messages");
 const { nowSeconds } = require("./time");
-const { milestoneTitle } = require("./celebrate");
+const { nextMilestoneTitle } = require("./celebrate");
 const { COUNTS_SQL } = require("./closer");
 
 const POSTS = {
@@ -31,13 +31,6 @@ const SAMPLE = {
   outcome: "Solved for the customer 🎉",
 };
 const SAMPLE_URL = "https://app.intercom.com";
-
-// Today's milestone, or the next one: every 50 days and every full year.
-function nextMilestone(days) {
-  let m = Math.max(days, 1);
-  while (m % 50 !== 0 && m % 365 !== 0) m++;
-  return m;
-}
 
 function createPreviews({ db, ratings, jobs, intercom, slack, clock }) {
   const latest = (where) =>
@@ -75,23 +68,38 @@ function createPreviews({ db, ratings, jobs, intercom, slack, clock }) {
     return { ...s, current: s.record.length + 1, isNewRecord: true };
   }
 
-  async function celebration(title) {
-    const s = recordStreak();
-    let stats = await jobs.streakStats(s.since);
+  const today = () => clock.localDate(nowSeconds());
+  const tracker = (s) => jobs.milestoneState(s, today()).tracker;
+
+  // kind: "record" (thanks everyone, hall of fame) or "milestone".
+  async function celebration(s, kind, title) {
+    let stats = await jobs.streakStats(s.since, { allAgents: kind === "record" });
     if (!stats.count) {
       stats = { count: 120, fiveStar: 100, fourStar: 20, average: 4.83, agents: [{ name: SAMPLE.admin_name, count: 40 }] };
     }
-    return messages.streakMessage(s, { title: title(s), ...stats });
+    return messages.streakMessage(s, { kind, title, ...stats }, tracker(s));
   }
 
   const build = {
     rating: () => ratingPost(positive()),
     negative: () => ratingPost(negative()),
     changed: () => ratingPost(negative(), { from: 5 }),
-    streak: () => messages.streakMessage(ratings.currentStreak()),
-    record: () => messages.streakMessage(recordStreak()),
-    celebration: () => celebration((s) => `🏆 NEW RECORD: ${s.current} days of 100% positive ratings`),
-    milestone: () => celebration((s) => milestoneTitle(nextMilestone(s.current))),
+    streak: () => {
+      const s = ratings.currentStreak();
+      return messages.streakMessage(s, null, tracker(s));
+    },
+    record: () => {
+      const s = recordStreak();
+      return messages.streakMessage(s, null, tracker(s));
+    },
+    celebration: () => {
+      const s = recordStreak();
+      return celebration(s, "record", `🏆 NEW RECORD: ${s.current} days of 100% positive ratings`);
+    },
+    milestone: () => {
+      const s = ratings.currentStreak();
+      return celebration(s, "milestone", nextMilestoneTitle(s.current));
+    },
     break: async () => {
       const { row, info } = breakData();
       return messages.breakMessage({ info, rating: row, url: await urlFor(row) });

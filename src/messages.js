@@ -113,10 +113,17 @@ function sinceText(streak) {
   return streak.since ? formatDate(addDays(streak.since, 1)) : null;
 }
 
+// The tracker line: the next milestones, nearest first (celebrate.upcoming()).
+function trackerBlock(tracker) {
+  return { type: "context", elements: [{ type: "mrkdwn", text: `🎯 Next: ${tracker.map((t) => t.text).join(" · ")}` }] };
+}
+
 // streak: result of computeStreak().
-// celebration (optional): { title, count, fiveStar, fourStar, average, agents: [{ name, slackId, count }] }
-function streakMessage(streak, celebration = null) {
-  if (celebration) return celebrationMessage(streak, celebration);
+// celebration (optional): { kind: "record" | "milestone", title, count, fiveStar, fourStar, average,
+//   agents: [{ name, slackId, count }] }; a record also thanks every agent and shows the hall of fame.
+// tracker (optional): result of celebrate.upcoming().
+function streakMessage(streak, celebration = null, tracker = []) {
+  if (celebration) return celebrationMessage(streak, celebration, tracker);
 
   const headline = streak.isNewRecord
     ? `🏆 *New record: ${days(streak.current)}* of 100% positive ratings`
@@ -132,17 +139,32 @@ function streakMessage(streak, celebration = null) {
   const text = streak.isNewRecord
     ? `🏆 New record: ${days(streak.current)} of 100% positive ratings`
     : `🔥 CSAT streak: ${days(streak.current)} of 100% positive ratings`;
-  return wrap(text, streak.isNewRecord ? GOLD : GREEN, [
+  const blocks = [
     { type: "section", text: { type: "mrkdwn", text: headline } },
     { type: "section", fields },
-  ]);
+  ];
+  // One short line, so Slack doesn't fold the post behind "Show more".
+  if (tracker.length) blocks.push(trackerBlock(tracker));
+  return wrap(text, streak.isNewRecord ? GOLD : GREEN, blocks);
+}
+
+// The longest earlier streaks, for a record celebration.
+function hallOfFame(streak) {
+  return [...(streak.history || [])]
+    .sort((a, b) => b.length - a.length)
+    .slice(0, 3)
+    .map((h) => `${days(h.length)} (${h.to.slice(0, 4)})`);
 }
 
 // Big celebration: plain blocks, not an attachment, so Slack never collapses
 // it behind "Show more". The header carries the message; nothing repeats it.
-function celebrationMessage(streak, celebration) {
+// A new record is the extra special one: @here, the hall of fame, and thanks
+// to every agent in the streak (a milestone thanks the top 5).
+function celebrationMessage(streak, celebration, tracker = []) {
+  const isRecord = celebration.kind === "record";
   const lines = [];
-  if (streak.record) {
+  // Milestones are celebrated in any streak; "past the old record" only in a record one.
+  if (streak.record && streak.isNewRecord) {
     lines.push(
       `*+${days(streak.current - streak.record.length)}* past the old record of ${recordText(streak.record)}`,
     );
@@ -151,6 +173,11 @@ function celebrationMessage(streak, celebration) {
   if (!celebration.title.includes(`${streak.current} days`)) context.unshift(`Today: ${days(streak.current)}`);
 
   const blocks = [{ type: "header", text: { type: "plain_text", text: celebration.title, emoji: true } }];
+  if (isRecord) {
+    const fame = hallOfFame(streak);
+    if (fame.length) lines.push(`🏆 *Hall of fame:* ${fame.join(" · ")} → *now ${days(streak.current)}*`);
+    lines.unshift("<!here> 🥇");
+  }
   if (lines.length) blocks.push({ type: "section", text: { type: "mrkdwn", text: lines.join("\n") } });
   blocks.push({ type: "context", elements: [{ type: "mrkdwn", text: context.join(" · ") }] });
   blocks.push({ type: "divider" });
@@ -172,10 +199,12 @@ function celebrationMessage(streak, celebration) {
     const names = celebration.agents
       .map((a) => `${a.slackId ? `<@${a.slackId}>` : escape(a.name)} (${a.count})`)
       .join(", ");
-    blocks.push({ type: "section", text: { type: "mrkdwn", text: `*Thank you* 🙌\n${names}` } });
+    const thanks = isRecord ? "*Thank you, everyone* 🙌" : "*Thank you* 🙌";
+    blocks.push({ type: "section", text: { type: "mrkdwn", text: `${thanks}\n${names}` } });
   }
+  if (tracker.length) blocks.push(trackerBlock(tracker));
   blocks.push({ type: "context", elements: [{ type: "mrkdwn", text: "🎊 Keep it going, team!" }] });
-  return { text: celebration.title, blocks };
+  return { text: isRecord ? `<!here> ${celebration.title}` : celebration.title, blocks };
 }
 
 function recordVerdict({ length, previousRecordDays, isRecord }) {

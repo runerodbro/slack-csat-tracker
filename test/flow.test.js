@@ -68,6 +68,16 @@ function setup() {
   return { app, config, state, slackCalls, log };
 }
 
+// Marks the current streak's milestones as celebrated, for tests about other things.
+function celebrateAll(app) {
+  const { celebrationFor } = require("../src/celebrate");
+  const today = app.clock.localDate(Math.floor(Date.now() / 1000));
+  const streak = app.ratings.currentStreak(today);
+  const { ratingsInRow } = app.jobs.milestoneState(streak, today);
+  const due = celebrationFor({ streak, ratingsInRow: ratingsInRow + 1000, today, celebrated: new Set() });
+  for (const key of due?.keys || []) app.db.prepare("INSERT OR IGNORE INTO scheduled_runs (job, run_key) VALUES ('celebration', ?)").run(key);
+}
+
 const rating = (score, created_at = Math.floor(Date.now() / 1000)) => ({
   rating: score, remark: null, created_at, contact: { id: "c1" }, teammate: { id: 7 },
 });
@@ -86,6 +96,7 @@ test("positive changed to negative: message updated and streak break posted; cha
   const { app, state, slackCalls } = setup();
   state.rating = rating(5);
   await app.ratings.processConversation("42");
+  celebrateAll(app);
 
   state.rating = rating(2);
   assert.equal(await app.ratings.processConversation("42"), "updated");
@@ -176,7 +187,9 @@ test("morning: record celebration once, with reactions; a test run does not use 
   assert.match(celebration, /<@UANN> \(1\)/);
   assert.match(celebration, /2 ratings/);
   assert.doesNotMatch(celebration, /Unassigned|Unknown/);
-  assert.equal(reactions().length, 4);
+  assert.match(celebration, /<!here>/, "a record notifies the channel");
+  assert.match(celebration, /Thank you, everyone/);
+  assert.equal(reactions().length, 10, "5 record reactions on each of the two posts");
 
   r = await app.jobs.morning("2026-10-06");
   assert.equal(r.celebration, null, "no second celebration");
@@ -394,7 +407,7 @@ test("/csat preview: every post, with sample data on an empty database and real 
 
   for (const name of Object.keys(POSTS)) assert.ok((await show(name)).length > 50, name);
   assert.match(await show("rating"), /Sample Agent/);
-  assert.match(await show("milestone"), /🎉 \d+ days of 100% positive ratings!.*Today: \d+ days/);
+  assert.match(await show("milestone"), /🎉 (\d+ days|One full year) of 100% positive ratings!.*Today: \d+ days.*🎯 Next:/);
   assert.match(await show("celebration"), /NEW RECORD.*During this streak.*Sample Agent \(40\)/);
   assert.match(await show("nonsense"), /I don't know the post `nonsense`/);
 
@@ -529,6 +542,7 @@ test("1–3 channel: every 1–3 rating and break post also goes there, copies a
   const updates = () => state.calls.filter((c) => c.path === "/chat.update");
   app.settings.set("negative_channel", "CNEG", "UADMIN");
   app.prefs.set({ ratings: false, breaks: false }, "UADMIN");
+  celebrateAll(app);
 
   // Rating and break posts are off in the main channel; the 1–3 channel still gets both.
   state.rating = { ...rating(2, now), remark: "Slow" };
@@ -676,4 +690,39 @@ test("Overview: drawn at once with 'Loading…', then again with the CX Score; a
   v = views().slice(before);
   assert.equal(v.length, 2);
   assert.match(v[1], /Could not be loaded this time/);
+});
+
+test("a break first posts the celebration the ending streak still had pending, then the break", async () => {
+  const { app, state } = setup();
+  const posts = () => state.calls.filter((c) => c.path === "/chat.postMessage");
+  const now = Math.floor(Date.now() / 1000);
+  celebrateAll(app);
+  // A milestone reached since the last morning post: 100 ratings in a row, not celebrated yet.
+  app.db.prepare("DELETE FROM scheduled_runs WHERE run_key LIKE '%:ratings:%'").run();
+  for (let i = 0; i < 100; i++) {
+    state.rating = rating(5, now - 3600 + i);
+    await app.ratings.processConversation(`r${i}`, { post: false, conversation: { id: `r${i}`, conversation_rating: state.rating } });
+  }
+  const before = posts().length;
+  state.rating = { ...rating(2, now), remark: "Slow" };
+  await app.ratings.processConversation("140");
+  const texts = posts().slice(before).map((c) => textOf(c.body));
+  assert.match(texts[1], /🎉 100 positive ratings in a row!/, "the celebration goes out before the break post");
+  assert.match(texts[2], /Streak has been broken/);
+  const reactions = state.calls.filter((c) => c.path === "/reactions.add").map((c) => c.body.name);
+  assert.deepEqual(reactions, ["tada"]);
+
+  // A second 1–3 rating the same day doesn't celebrate again.
+  state.rating = rating(1, now + 10);
+  const count = posts().length;
+  await app.ratings.processConversation("141");
+  assert.ok(posts().slice(count).every((c) => !/🎉/.test(textOf(c.body))));
+});
+
+test("Perfect Year: a break on 1 January celebrates the year first", () => {
+  const { celebrationFor } = require("../src/celebrate");
+  const s = { current: 389, since: "2025-12-08", isNewRecord: true, record: { length: 226, from: "2025-03-09", to: "2025-10-22" }, history: [] };
+  const celebrated = new Set(["2025-12-08:record", "2025-12-08:100", "2025-12-08:200", "2025-12-08:300", "2025-12-08:365"]);
+  assert.equal(celebrationFor({ streak: s, today: "2027-01-01", celebrated }), null, "a normal 1 January waits");
+  assert.match(celebrationFor({ streak: s, today: "2027-01-01", celebrated, atBreak: true }).title, /Perfect Year 2026/);
 });
