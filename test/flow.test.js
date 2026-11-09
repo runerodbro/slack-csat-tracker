@@ -748,6 +748,7 @@ test("agents' perfect year: one record-level post in January when the team didn'
   assert.match(post, /🏆 2026 - A PERFECT YEAR for 1 agent/);
   assert.match(post, /<!here>/);
   assert.match(post, /<@UANN> \(30\)/);
+  assert.match(post, /Exclusively positive feedback in all of 2026 - and at least 30 ratings:/);
   assert.doesNotMatch(post, /Former/);
   assert.equal((await app.jobs.morning("2027-01-05")).perfectAgents, 0, "once");
 });

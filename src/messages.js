@@ -219,7 +219,7 @@ function agentsPerfectYearMessage(year, agents) {
       { type: "header", text: { type: "plain_text", text: title, emoji: true } },
       {
         type: "section",
-        text: { type: "mrkdwn", text: `<!here> 🥇\nNot one 1–3 rating in all of ${year}, with at least 30 ratings each:\n${names}` },
+        text: { type: "mrkdwn", text: `<!here> 🥇\nExclusively positive feedback in all of ${year} - and at least 30 ratings:\n${names}` },
       },
       { type: "context", elements: [{ type: "mrkdwn", text: "🎊 Exclusively positive ratings. Congratulations!" }] },
     ],
