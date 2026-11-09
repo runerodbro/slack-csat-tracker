@@ -176,7 +176,9 @@ test("morning: record celebration once, with reactions; a test run does not use 
   assert.match(celebration, /<@UANN> \(1\)/);
   assert.match(celebration, /2 ratings/);
   assert.doesNotMatch(celebration, /Unassigned|Unknown/);
-  assert.equal(reactions().length, 4);
+  assert.match(celebration, /<!here>/, "a record notifies the channel");
+  assert.match(celebration, /Thank you, everyone/);
+  assert.equal(reactions().length, 10, "5 record reactions on each of the two posts");
 
   r = await app.jobs.morning("2026-10-06");
   assert.equal(r.celebration, null, "no second celebration");
@@ -394,7 +396,7 @@ test("/csat preview: every post, with sample data on an empty database and real 
 
   for (const name of Object.keys(POSTS)) assert.ok((await show(name)).length > 50, name);
   assert.match(await show("rating"), /Sample Agent/);
-  assert.match(await show("milestone"), /🎉 \d+ days of 100% positive ratings!.*Today: \d+ days/);
+  assert.match(await show("milestone"), /🎉 (\d+ days|One full year) of 100% positive ratings!.*Today: \d+ days.*🎯 Next:/);
   assert.match(await show("celebration"), /NEW RECORD.*During this streak.*Sample Agent \(40\)/);
   assert.match(await show("nonsense"), /I don't know the post `nonsense`/);
 
