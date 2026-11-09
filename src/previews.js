@@ -3,7 +3,7 @@
 
 const messages = require("./messages");
 const { nowSeconds } = require("./time");
-const { nextMilestoneTitle } = require("./celebrate");
+const { nextMilestone } = require("./celebrate");
 const { COUNTS_SQL } = require("./closer");
 
 const POSTS = {
@@ -73,7 +73,7 @@ function createPreviews({ db, ratings, jobs, intercom, slack, clock }) {
 
   // kind: "record" (thanks everyone, hall of fame) or "milestone".
   async function celebration(s, kind, title) {
-    let stats = await jobs.streakStats(s.since, { allAgents: kind === "record" });
+    let stats = await jobs.streakStats(s.since, { allAgents: kind !== "milestone" });
     if (!stats.count) {
       stats = { count: 120, fiveStar: 100, fourStar: 20, average: 4.83, agents: [{ name: SAMPLE.admin_name, count: 40 }] };
     }
@@ -98,7 +98,8 @@ function createPreviews({ db, ratings, jobs, intercom, slack, clock }) {
     },
     milestone: () => {
       const s = ratings.currentStreak();
-      return celebration(s, "milestone", nextMilestoneTitle(s.current));
+      const { kind, title } = nextMilestone(s.current);
+      return celebration(s, kind, title);
     },
     break: async () => {
       const { row, info } = breakData();

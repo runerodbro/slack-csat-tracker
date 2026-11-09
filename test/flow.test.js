@@ -407,7 +407,7 @@ test("/csat preview: every post, with sample data on an empty database and real 
 
   for (const name of Object.keys(POSTS)) assert.ok((await show(name)).length > 50, name);
   assert.match(await show("rating"), /Sample Agent/);
-  assert.match(await show("milestone"), /🎉 (\d+ days|One full year) of 100% positive ratings!.*Today: \d+ days.*🎯 Next:/);
+  assert.match(await show("milestone"), /(🎉 \d+ days of 100% positive ratings!|🏆 PERFECT YEAR: 365 days of 100% positive ratings).*Today: \d+ days.*🎯 Next:/);
   assert.match(await show("celebration"), /NEW RECORD.*During this streak.*Sample Agent \(40\)/);
   assert.match(await show("nonsense"), /I don't know the post `nonsense`/);
 
@@ -724,5 +724,5 @@ test("Perfect Year: a break on 1 January celebrates the year first", () => {
   const s = { current: 389, since: "2025-12-08", isNewRecord: true, record: { length: 226, from: "2025-03-09", to: "2025-10-22" }, history: [] };
   const celebrated = new Set(["2025-12-08:record", "2025-12-08:100", "2025-12-08:200", "2025-12-08:300", "2025-12-08:365"]);
   assert.equal(celebrationFor({ streak: s, today: "2027-01-01", celebrated }), null, "a normal 1 January waits");
-  assert.match(celebrationFor({ streak: s, today: "2027-01-01", celebrated, atBreak: true }).title, /Perfect Year 2026/);
+  assert.match(celebrationFor({ streak: s, today: "2027-01-01", celebrated, atBreak: true }).title, /2026 - A PERFECT YEAR/);
 });

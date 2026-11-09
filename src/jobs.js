@@ -65,7 +65,9 @@ function createJobs({ db, intercom, slack, clock, ratings, queue, prefs, cx, log
     return { ratingsInRow, tracker: upcoming({ streak, ratingsInRow, ratesPerDay, today }) };
   }
 
-  const REACTIONS = { record: ["trophy", "first_place_medal", "tada", "confetti_ball", "fire"], milestone: ["tada"] };
+  const SPECIAL = ["trophy", "first_place_medal", "tada", "confetti_ball", "fire"];
+  const REACTIONS = { record: SPECIAL, special: SPECIAL, milestone: ["tada"] };
+  const thanksEveryone = (kind) => kind === "record" || kind === "special";
 
   // remember: false for test runs, so the real post still celebrates.
   // forceCelebration: show the celebration even if it was used (preview).
@@ -75,7 +77,7 @@ function createJobs({ db, intercom, slack, clock, ratings, queue, prefs, cx, log
     const celebrated = forceCelebration ? new Set() : new Set(celebratedKeys.all().map((r) => r.run_key));
     const due = celebrationFor({ streak, ratingsInRow, today, celebrated });
     const celebration = due
-      ? { kind: due.kind, title: due.title, ...(await streakStats(streak.since, { allAgents: due.kind === "record" })) }
+      ? { kind: due.kind, title: due.title, ...(await streakStats(streak.since, { allAgents: thanksEveryone(due.kind) })) }
       : null;
 
     const posted = await slack.post(messages.streakMessage(streak, celebration, tracker));
@@ -98,7 +100,7 @@ function createJobs({ db, intercom, slack, clock, ratings, queue, prefs, cx, log
     const celebrated = new Set(celebratedKeys.all().map((r) => r.run_key));
     const due = celebrationFor({ streak, ratingsInRow, today, celebrated, atBreak: true });
     if (!due) return null;
-    const stats = await streakStats(streak.since, { allAgents: due.kind === "record", until });
+    const stats = await streakStats(streak.since, { allAgents: thanksEveryone(due.kind), until });
     const posted = await slack.post(messages.streakMessage(streak, { kind: due.kind, title: due.title, ...stats }));
     for (const name of REACTIONS[due.kind]) await slack.react(posted.ts, name, posted.channel);
     for (const key of due.keys) markCelebrated.run(key);

@@ -42,28 +42,33 @@ Wednesday morning.
   is gold and says "🏆 New record: 297 days of 100% positive ratings", with the
   number of days past the old record.
 - **Milestone tracker:** one line with the next three milestones, nearest
-  first: "🎯 Next: 400 ratings in a row: 12 to go · One full year in 29 days ·
-  Perfect Year 2026 in 53 days". The milestones are:
+  first: "🎯 Next: 365 Days in 29 days · 2026 - A PERFECT YEAR in 53 days ·
+  400 ratings in a row: 12 to go". The milestones are:
   - every 100 days and every full year (365, 730…);
   - every 100 positive ratings in a row (the ratings that count in the
     streak), shown as ratings to go;
   - beating the record (when the streak isn't one), and twice the old record
     (when it is);
-  - a Perfect Year: a whole calendar year without a 1–3 rating.
+  - a calendar year without a 1–3 rating ("2026 - A PERFECT YEAR").
 - **Celebration** when a milestone is reached, in any streak: a large header
   ("🎉 400 days of 100% positive ratings!"), statistics for the streak, thanks
   with @mentions of the 5 agents with the most ratings, the tracker, and a 🎉
   reaction. Two milestones on the same morning share one celebration ("🎉 400
   days · 400 positive ratings in a row!"). A milestone reached on a weekend or
-  between two morning posts is celebrated in the next one, and a Perfect Year
+  between two morning posts is celebrated in the next one, and a calendar year
   in the first morning post from 2 January. If a 1–3 rating breaks the streak
   first, the pending celebration goes out just before "Streak has been
-  broken" (a Perfect Year then also on 1 January), so no milestone is lost.
+  broken" (a calendar year then also on 1 January), so no milestone is lost.
   The "Morning streak post" switch covers these celebrations too.
-- **Record celebration**, the extra special one, on the first record post of a
-  streak: "🏆 NEW RECORD: 227 days of 100% positive ratings", with @here, a
-  hall of fame of the longest earlier streaks, thanks to every agent in the
-  streak, and 🏆🥇🎉🎊🔥 reactions.
+- **Extra special celebrations**, with @here, a hall of fame of the longest
+  earlier streaks, thanks to every agent in the streak, and 🏆🥇🎉🎊🔥
+  reactions:
+  - the first record post of a streak: "🏆 NEW RECORD: 227 days of 100%
+    positive ratings";
+  - every full year: "🏆 PERFECT YEAR: 365 days of 100% positive ratings",
+    then "🏆 2 PERFECT YEARS: 730 days…";
+  - a calendar year: "🏆 2026 - A PERFECT YEAR: Exclusively positive
+    ratings".
 - **Streak broken:** a 1–3 rating posts "Streak has been broken 😭" after the
   5-minute delay, with how long the streak lasted and whether it beat the
   record. Only the first 1–3 rating of a day posts this.

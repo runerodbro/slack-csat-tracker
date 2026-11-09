@@ -26,7 +26,8 @@ test("milestones: every 100 days, full years, 100 ratings in a row; weekend ones
   assert.equal(due(streak(337), 350, "2026-11-10", celebrated), null);
   // 365 days fell on a weekend: celebrated on the next morning.
   const year = due(streak(367), 360, "2026-12-10", celebrated);
-  assert.equal(year.title, "🎉 One full year of 100% positive ratings!");
+  assert.equal(year.title, "🏆 PERFECT YEAR: 365 days of 100% positive ratings");
+  assert.equal(year.kind, "special", "a full year is as special as a record");
   year.keys.forEach((k) => celebrated.add(k));
   // Two on the same morning: one celebration, both named (the Perfect Year went out on 4 January).
   celebrated.add("perfect:2026");
@@ -39,7 +40,11 @@ test("twice the old record, and a Perfect Year from 2 January", () => {
   assert.match(due(streak(452), 0, "2027-03-05", new Set([...celebrated, "perfect:2026"])).title, /Twice the old record: 452 days/);
   const onNewYear = new Set([...celebrated, "2025-12-08:double"]);
   assert.equal(due(streak(389), 0, "2027-01-01", onNewYear), null, "1 January is a holiday");
-  assert.match(due(streak(392), 0, "2027-01-04", onNewYear).title, /Perfect Year 2026: not one negative rating all year/);
+  const calendar = due(streak(392), 0, "2027-01-04", onNewYear);
+  assert.equal(calendar.title, "🏆 2026 - A PERFECT YEAR: Exclusively positive ratings");
+  assert.equal(calendar.kind, "special");
+  assert.equal(due({ ...streak(730) }, 0, "2027-12-08", new Set([...onNewYear, "perfect:2026", "2025-12-08:500", "2025-12-08:600", "2025-12-08:700"])).title,
+    "🏆 2 PERFECT YEARS: 730 days of 100% positive ratings");
   // A streak that started in 2026 can't make 2026 a Perfect Year.
   const later = { ...streak(300), since: "2026-03-01" };
   assert.equal(due(later, 0, "2027-01-04", new Set(["2026-03-01:record", "2026-03-01:100", "2026-03-01:200", "2026-03-01:300"])), null);
@@ -54,20 +59,20 @@ test("milestones are celebrated in a streak that is not a record too", () => {
 
 test("tracker: the next three, nearest first", () => {
   const next = upcoming({ streak: streak(336), ratingsInRow: 388, ratesPerDay: 1.15, today: "2026-11-09" });
-  assert.deepEqual(next.map((t) => t.text), ["400 ratings in a row: 12 to go", "One full year in 29 days", "Perfect Year 2026 in 53 days"]);
+  assert.deepEqual(next.map((t) => t.text), ["400 ratings in a row: 12 to go", "365 Days in 29 days", "2026 - A PERFECT YEAR in 53 days"]);
   const normal = upcoming({ streak: { current: 153, since: "2026-06-09", isNewRecord: false, record, history }, ratingsInRow: 170, ratesPerDay: 1.1, today: "2026-11-09" });
   // 30 ratings at 1.1 a day is about 27 days, so it comes first.
   assert.deepEqual(normal.map((t) => t.text), ["200 ratings in a row: 30 to go", "200 days in 47 days", "beat the record in 74 days"]);
 });
 
 test("record post: gold, tracker on one line, no repeated text", () => {
-  const plain = streakMessage(streak(296), null, [{ text: "One full year in 69 days" }, { text: "300 days in 4 days" }]);
+  const plain = streakMessage(streak(296), null, [{ text: "365 Days in 69 days" }, { text: "300 days in 4 days" }]);
   assert.equal(plain.text, undefined);
   assert.equal(plain.attachments[0].color, "#D4A017");
   const json = JSON.stringify(plain.attachments[0].blocks);
   assert.match(json, /New record: 296 days/);
   assert.match(json, /\+70 days/);
-  assert.match(json, /🎯 Next: One full year in 69 days · 300 days in 4 days/);
+  assert.match(json, /🎯 Next: 365 Days in 69 days · 300 days in 4 days/);
   assert.doesNotMatch(json, /Current streak/);
 });
 
@@ -89,6 +94,10 @@ test("record celebration: @here, hall of fame, everyone thanked; a milestone sta
   assert.doesNotMatch(m, /<!here>|Hall of fame/);
   assert.match(m, /Today: 301 days/);
   assert.match(m, /\*Thank you\* 🙌/);
+
+  const year = streakMessage(streak(365), { kind: "special", title: "🏆 PERFECT YEAR: 365 days of 100% positive ratings", ...stats });
+  assert.match(year.text, /^<!here> 🏆 PERFECT YEAR/);
+  assert.match(JSON.stringify(year.blocks), /Hall of fame.*Thank you, everyone/);
 
   const notRecord = streakMessage({ ...streak(100, false), since: "2026-08-01" }, { kind: "milestone", title: "🎉 100 days of 100% positive ratings!", ...stats });
   assert.doesNotMatch(JSON.stringify(notRecord), /past the old record/);

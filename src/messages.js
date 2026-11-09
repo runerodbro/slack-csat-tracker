@@ -161,7 +161,8 @@ function hallOfFame(streak) {
 // A new record is the extra special one: @here, the hall of fame, and thanks
 // to every agent in the streak (a milestone thanks the top 5).
 function celebrationMessage(streak, celebration, tracker = []) {
-  const isRecord = celebration.kind === "record";
+  // A new record and the two year milestones get the extras.
+  const isRecord = celebration.kind === "record" || celebration.kind === "special";
   const lines = [];
   // Milestones are celebrated in any streak; "past the old record" only in a record one.
   if (streak.record && streak.isNewRecord) {
