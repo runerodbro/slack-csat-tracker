@@ -56,7 +56,10 @@ Wednesday morning.
   reaction. Two milestones on the same morning share one celebration ("🎉 400
   days · 400 positive ratings in a row!"). A milestone reached on a weekend or
   between two morning posts is celebrated in the next one, and a Perfect Year
-  in the first morning post from 2 January.
+  in the first morning post from 2 January. If a 1–3 rating breaks the streak
+  first, the pending celebration goes out just before "Streak has been
+  broken" (a Perfect Year then also on 1 January), so no milestone is lost.
+  The "Morning streak post" switch covers these celebrations too.
 - **Record celebration**, the extra special one, on the first record post of a
   streak: "🏆 NEW RECORD: 227 days of 100% positive ratings", with @here, a
   hall of fame of the longest earlier streaks, thanks to every agent in the

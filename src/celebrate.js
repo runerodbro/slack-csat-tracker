@@ -13,6 +13,10 @@
 // a weekend, or between two morning posts, is celebrated in the next morning
 // post. Milestones already passed when a celebration goes out are marked done
 // with it, so only the latest of each kind is celebrated.
+//
+// When a 1–3 rating breaks the streak, any celebration the ending streak still
+// had pending goes out first, then the break post (atBreak), so no milestone
+// is lost. A Perfect Year then goes out on 1 January too.
 
 const { daysBetween } = require("./time");
 
@@ -44,9 +48,9 @@ function nextDayMilestone(current) {
 // (since) before 1 January Y.
 const perfectYearPossible = (since, year) => since < `${year}-01-01`;
 
-// state: { streak, ratingsInRow, today (YYYY-MM-DD), celebrated: Set }.
+// state: { streak, ratingsInRow, today (YYYY-MM-DD), celebrated: Set, atBreak }.
 // Returns { kind: "record" | "milestone", title, keys } or null.
-function celebrationFor({ streak, ratingsInRow = 0, today, celebrated }) {
+function celebrationFor({ streak, ratingsInRow = 0, today, celebrated, atBreak = false }) {
   if (!streak.since) return null;
   const s = streak.since;
   const done = (key) => celebrated.has(key);
@@ -71,7 +75,8 @@ function celebrationFor({ streak, ratingsInRow = 0, today, celebrated }) {
   }
 
   const year = Number(today?.slice(0, 4)) - 1;
-  if (today >= `${year + 1}-01-02` && perfectYearPossible(s, year)) {
+  const perfectFrom = atBreak ? `${year + 1}-01-01` : `${year + 1}-01-02`;
+  if (today >= perfectFrom && perfectYearPossible(s, year)) {
     keys.push(`perfect:${year}`);
     if (!done(`perfect:${year}`)) due.push({ name: `Perfect Year ${year}`, title: `Perfect Year ${year}: not one negative rating all year` });
   }

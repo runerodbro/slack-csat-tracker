@@ -29,12 +29,14 @@ function createJobs({ db, intercom, slack, clock, ratings, queue, prefs, cx, log
   const celebratedKeys = db.prepare("SELECT run_key FROM scheduled_runs WHERE job = 'celebration'");
   const markCelebrated = db.prepare("INSERT OR IGNORE INTO scheduled_runs (job, run_key) VALUES ('celebration', ?)");
   const streakRows = db.prepare(
-    `SELECT score, admin_id, admin_name, admin_email FROM ratings WHERE rated_at >= ? AND ${COUNTS_SQL}`,
+    `SELECT score, admin_id, admin_name, admin_email FROM ratings WHERE rated_at >= ? AND rated_at < ? AND ${COUNTS_SQL}`,
   );
+  const NO_END = Number.MAX_SAFE_INTEGER;
 
   // allAgents: thank every agent (a record), not only the top 5.
-  async function streakStats(since, { allAgents = false } = {}) {
-    const rows = streakRows.all(clock.epochAt(addDays(since, 1), 0, 0));
+  // until: count only ratings before this time (a streak that is ending).
+  async function streakStats(since, { allAgents = false, until = NO_END } = {}) {
+    const rows = streakRows.all(clock.epochAt(addDays(since, 1), 0, 0), until);
     const agents = new Map();
     // Only real agents get thanks; ratings without one still count in the totals.
     for (const r of rows) {
@@ -57,8 +59,8 @@ function createJobs({ db, intercom, slack, clock, ratings, queue, prefs, cx, log
 
   // Positive ratings in a row (the ratings that count in the current streak),
   // and the tracker's next milestones.
-  function milestoneState(streak, today) {
-    const ratingsInRow = streak.since ? streakRows.all(clock.epochAt(addDays(streak.since, 1), 0, 0)).length : 0;
+  function milestoneState(streak, today, until = NO_END) {
+    const ratingsInRow = streak.since ? streakRows.all(clock.epochAt(addDays(streak.since, 1), 0, 0), until).length : 0;
     const ratesPerDay = streak.current ? ratingsInRow / streak.current : 0;
     return { ratingsInRow, tracker: upcoming({ streak, ratingsInRow, ratesPerDay, today }) };
   }
@@ -82,6 +84,26 @@ function createJobs({ db, intercom, slack, clock, ratings, queue, prefs, cx, log
       if (remember) for (const key of due.keys) markCelebrated.run(key);
     }
     return { ...streak, ratingsInRow, celebration: due?.title || null };
+  }
+
+  // Called just before a break post: posts the celebration the ending streak
+  // still had pending (for example a Perfect Year on 1 January, or a milestone
+  // reached since the last morning post), so it isn't lost. It looks as on a
+  // morning, without the tracker: the break post right after says the rest.
+  // streak: the ending streak; until: the time of the breaking rating.
+  // The morning post switch covers celebrations, so it covers this one too.
+  async function celebrateBeforeBreak({ streak, until, today }) {
+    if (prefs && !prefs.get().morning) return null;
+    const { ratingsInRow } = milestoneState(streak, today, until);
+    const celebrated = new Set(celebratedKeys.all().map((r) => r.run_key));
+    const due = celebrationFor({ streak, ratingsInRow, today, celebrated, atBreak: true });
+    if (!due) return null;
+    const stats = await streakStats(streak.since, { allAgents: due.kind === "record", until });
+    const posted = await slack.post(messages.streakMessage(streak, { kind: due.kind, title: due.title, ...stats }));
+    for (const name of REACTIONS[due.kind]) await slack.react(posted.ts, name, posted.channel);
+    for (const key of due.keys) markCelebrated.run(key);
+    log.info(`Celebrated before the break: ${due.title}`);
+    return due.title;
   }
 
   // friday: local date of the report. Covers Friday 14:00 a week ago to 14:00 on that day.
@@ -189,7 +211,7 @@ function createJobs({ db, intercom, slack, clock, ratings, queue, prefs, cx, log
     return { ...counts, teams };
   }
 
-  return { morning, weekly, weekReport, streakStats, milestoneState, reconcile, backfill, classify, lastReportFriday };
+  return { morning, weekly, weekReport, streakStats, milestoneState, celebrateBeforeBreak, reconcile, backfill, classify, lastReportFriday };
 }
 
 module.exports = { createJobs };

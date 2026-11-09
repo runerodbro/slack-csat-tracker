@@ -31,6 +31,7 @@ function createApp(config, { db = open(), log = console, channelOverride = null 
   const queue = createQueue({ db, handler: (id) => ratings.processConversation(id), log });
   const cx = createCx({ intercom, prefs, log });
   const jobs = createJobs({ db, intercom, slack, clock, ratings, queue, prefs, cx, log });
+  ratings.onBeforeBreak(jobs.celebrateBeforeBreak);
   const previews = createPreviews({ db, ratings, jobs, intercom, slack, clock });
   const access = createAccess({ slack, settings, config, log });
   const commands = createCommands({ slack, settings, ratings, previews, access, getChannel, clock, config, log });
