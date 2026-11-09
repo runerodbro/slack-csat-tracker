@@ -161,7 +161,8 @@ function hallOfFame(streak) {
 // A new record is the extra special one: @here, the hall of fame, and thanks
 // to every agent in the streak (a milestone thanks the top 5).
 function celebrationMessage(streak, celebration, tracker = []) {
-  const isRecord = celebration.kind === "record";
+  // A new record and the two year milestones get the extras.
+  const isRecord = celebration.kind === "record" || celebration.kind === "special";
   const lines = [];
   // Milestones are celebrated in any streak; "past the old record" only in a record one.
   if (streak.record && streak.isNewRecord) {
@@ -205,6 +206,24 @@ function celebrationMessage(streak, celebration, tracker = []) {
   if (tracker.length) blocks.push(trackerBlock(tracker));
   blocks.push({ type: "context", elements: [{ type: "mrkdwn", text: "🎊 Keep it going, team!" }] });
   return { text: isRecord ? `<!here> ${celebration.title}` : celebration.title, blocks };
+}
+
+// Agents with a perfect calendar year, when the team didn't have one.
+// agents: [{ name, slackId, count }], most ratings first.
+function agentsPerfectYearMessage(year, agents) {
+  const title = `🏆 ${year} - A PERFECT YEAR for ${agents.length} ${agents.length === 1 ? "agent" : "agents"}`;
+  const names = agents.map((a) => `${a.slackId ? `<@${a.slackId}>` : escape(a.name)} (${a.count})`).join(" · ");
+  return {
+    text: `<!here> ${title}`,
+    blocks: [
+      { type: "header", text: { type: "plain_text", text: title, emoji: true } },
+      {
+        type: "section",
+        text: { type: "mrkdwn", text: `<!here> 🥇\nExclusively positive feedback in all of ${year} - and at least 30 ratings:\n${names}` },
+      },
+      { type: "context", elements: [{ type: "mrkdwn", text: "🎊 Congratulations!" }] },
+    ],
+  };
 }
 
 function recordVerdict({ length, previousRecordDays, isRecord }) {
@@ -344,4 +363,4 @@ function weeklyMessage({ stats, from, to }) {
   return { text: `Weekly CSAT report: ${stats.total} ratings, average ${stats.average.toFixed(2)}`, blocks };
 }
 
-module.exports = { ratingMessage, streakMessage, breakMessage, restoredMessage, weeklyMessage, cxBlocks, escape, teamLabel, recordText, sinceText, pct, SCORES };
+module.exports = { ratingMessage, streakMessage, breakMessage, restoredMessage, weeklyMessage, agentsPerfectYearMessage, cxBlocks, escape, teamLabel, recordText, sinceText, pct, SCORES };

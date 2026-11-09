@@ -407,7 +407,7 @@ test("/csat preview: every post, with sample data on an empty database and real 
 
   for (const name of Object.keys(POSTS)) assert.ok((await show(name)).length > 50, name);
   assert.match(await show("rating"), /Sample Agent/);
-  assert.match(await show("milestone"), /🎉 (\d+ days|One full year) of 100% positive ratings!.*Today: \d+ days.*🎯 Next:/);
+  assert.match(await show("milestone"), /(🎉 \d+ days of 100% positive ratings!|🏆 PERFECT YEAR: 365 days of 100% positive ratings).*Today: \d+ days.*🎯 Next:/);
   assert.match(await show("celebration"), /NEW RECORD.*During this streak.*Sample Agent \(40\)/);
   assert.match(await show("nonsense"), /I don't know the post `nonsense`/);
 
@@ -724,5 +724,65 @@ test("Perfect Year: a break on 1 January celebrates the year first", () => {
   const s = { current: 389, since: "2025-12-08", isNewRecord: true, record: { length: 226, from: "2025-03-09", to: "2025-10-22" }, history: [] };
   const celebrated = new Set(["2025-12-08:record", "2025-12-08:100", "2025-12-08:200", "2025-12-08:300", "2025-12-08:365"]);
   assert.equal(celebrationFor({ streak: s, today: "2027-01-01", celebrated }), null, "a normal 1 January waits");
-  assert.match(celebrationFor({ streak: s, today: "2027-01-01", celebrated, atBreak: true }).title, /Perfect Year 2026/);
+  assert.match(celebrationFor({ streak: s, today: "2027-01-01", celebrated, atBreak: true }).title, /2026 - A PERFECT YEAR/);
+});
+
+test("agents' perfect year: one record-level post in January when the team didn't have one", async () => {
+  const { app, state } = setup();
+  const posts = () => state.calls.filter((c) => c.path === "/chat.postMessage");
+  const at = (date) => Date.parse(`${date}T10:00:00Z`) / 1000;
+  const add = (id, score, date, admin) => {
+    state.rating = { ...rating(score, at(date)), teammate: { id: admin } };
+    return app.ratings.processConversation(id, { post: false, conversation: { id, conversation_rating: state.rating } });
+  };
+  // Ann (7): 30 positive ratings in 2026. 4242 has 40, but has left: /admins no longer lists them.
+  for (let i = 0; i < 30; i++) await add(`a${i}`, 5, "2026-03-02", 7);
+  for (let i = 0; i < 40; i++) await add(`f${i}`, 5, "2026-04-01", 4242);
+  await add("neg", 2, "2026-06-01", 999); // the team's year isn't perfect
+  app.db.prepare("UPDATE ratings SET admin_id = '4242', admin_name = 'Former', admin_email = 'f@x.io' WHERE conversation_id LIKE 'f%'").run();
+
+  assert.equal((await app.jobs.morning("2027-01-01")).perfectAgents, 0, "not on 1 January");
+  const before = posts().length;
+  assert.equal((await app.jobs.morning("2027-01-04")).perfectAgents, 1);
+  const post = posts().slice(before).map((c) => JSON.stringify(c.body)).find((t) => t.includes("PERFECT YEAR for"));
+  assert.match(post, /🏆 2026 - A PERFECT YEAR for 1 agent/);
+  assert.match(post, /<!here>/);
+  assert.match(post, /<@UANN> \(30\)/);
+  assert.match(post, /Exclusively positive feedback in all of 2026 - and at least 30 ratings:/);
+  assert.doesNotMatch(post, /Former/);
+  assert.equal((await app.jobs.morning("2027-01-05")).perfectAgents, 0, "once");
+});
+
+test("agents' perfect year: nothing when the team had one, below 30 ratings, or outside January", async () => {
+  const { app, state } = setup();
+  const at = (date) => Date.parse(`${date}T10:00:00Z`) / 1000;
+  for (let i = 0; i < 29; i++) {
+    state.rating = { ...rating(5, at("2026-03-02")), teammate: { id: 7 } };
+    await app.ratings.processConversation(`b${i}`, { post: false, conversation: { id: `b${i}`, conversation_rating: state.rating } });
+  }
+  state.rating = { ...rating(1, at("2026-05-02")), teammate: { id: 999 } };
+  await app.ratings.processConversation("neg", { post: false, conversation: { id: "neg", conversation_rating: state.rating } });
+  assert.equal((await app.jobs.morning("2027-01-04")).perfectAgents, 0, "29 ratings is below the minimum");
+  assert.equal((await app.jobs.morning("2026-11-10")).perfectAgents, 0, "no late celebration for 2025");
+});
+
+test("agents who have left are not named in thanks or the weekly top agents; their ratings still count", async () => {
+  const { app, state } = setup();
+  const now = Math.floor(Date.now() / 1000);
+  for (const [id, admin] of [["x1", 7], ["x2", 4242], ["x3", 4242]]) {
+    state.rating = { ...rating(5, now - 60), teammate: { id: admin } };
+    await app.ratings.processConversation(id, { post: false, conversation: { id, conversation_rating: state.rating } });
+  }
+  app.db.prepare("UPDATE ratings SET admin_id = '4242', admin_name = 'Former', admin_email = 'f@x.io' WHERE conversation_id IN ('x2','x3')").run();
+
+  const stats = await app.jobs.weekly(app.jobs.lastReportFriday(now + 7 * 86400));
+  assert.equal(stats.total, 3, "their ratings count");
+  assert.deepEqual(stats.agents.map((a) => a.name), ["Ann"]);
+  const report = JSON.stringify(state.calls.filter((c) => c.path === "/chat.postMessage").at(-1).body);
+  assert.match(report, /Top agents\*\\n1\. \*Ann\*/);
+  assert.doesNotMatch(report, /Former/);
+
+  const thanks = await app.jobs.streakStats(app.ratings.currentStreak().since, { allAgents: true });
+  assert.equal(thanks.count, 3);
+  assert.deepEqual(thanks.agents.map((a) => a.name), ["Ann"]);
 });

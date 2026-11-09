@@ -5,9 +5,14 @@
 // - days: every 100 days and every full year (365, 730…);
 // - positive ratings in a row: every 100;
 // - twice the old record (only during a record streak);
-// - a Perfect Year: a whole calendar year without a 1–3 rating, celebrated in
+// - a calendar year without a 1–3 rating ("2026 - A PERFECT YEAR"), celebrated in
 //   the first morning post from 2 January (1 January is a holiday);
 // - a new record: the extra special celebration, once per streak.
+//
+// The two year milestones are as special as a new record ("special": @here,
+// hall of fame, every agent thanked, five reactions):
+// - every full year: "🏆 PERFECT YEAR: 365 days of 100% positive ratings";
+// - a calendar year: "🏆 2026 - A PERFECT YEAR: Exclusively positive ratings".
 //
 // Every reached milestone is celebrated, in any streak. A milestone reached on
 // a weekend, or between two morning posts, is celebrated in the next morning
@@ -16,7 +21,7 @@
 //
 // When a 1–3 rating breaks the streak, any celebration the ending streak still
 // had pending goes out first, then the break post (atBreak), so no milestone
-// is lost. A Perfect Year then goes out on 1 January too.
+// is lost. A calendar year then goes out on 1 January too.
 
 const { daysBetween } = require("./time");
 
@@ -24,13 +29,23 @@ const RATINGS_STEP = 100;
 
 const isDayMilestone = (n) => n > 0 && (n % 100 === 0 || n % 365 === 0);
 
-function yearsText(n) {
+const isFullYear = (n) => n % 365 === 0;
+
+function perfectYears(n) {
   const years = n / 365;
-  return years === 1 ? "One full year" : `${years} full years`;
+  return years === 1 ? "PERFECT YEAR" : `${years} PERFECT YEARS`;
 }
 
-// Short names, for combined titles and the tracker.
-const dayName = (n) => (n % 365 === 0 ? yearsText(n) : `${n} days`);
+const calendarName = (year) => `${year} - A PERFECT YEAR`;
+
+// The tracker's names: "365 Days" for a full year, "400 days" otherwise.
+const dayName = (n) => (isFullYear(n) ? `${n} Days` : `${n} days`);
+
+// A day milestone as a celebration: { name, title, special }.
+function dayMilestone(n) {
+  if (isFullYear(n)) return { name: perfectYears(n), title: `${perfectYears(n)}: ${n} days of 100% positive ratings`, special: true };
+  return { name: `${n} days`, title: `${n} days of 100% positive ratings!`, special: false };
+}
 
 // The highest day milestone reached, or 0.
 function highestDayMilestone(current) {
@@ -49,7 +64,7 @@ function nextDayMilestone(current) {
 const perfectYearPossible = (since, year) => since < `${year}-01-01`;
 
 // state: { streak, ratingsInRow, today (YYYY-MM-DD), celebrated: Set, atBreak }.
-// Returns { kind: "record" | "milestone", title, keys } or null.
+// Returns { kind: "record" | "special" | "milestone", title, keys } or null.
 function celebrationFor({ streak, ratingsInRow = 0, today, celebrated, atBreak = false }) {
   if (!streak.since) return null;
   const s = streak.since;
@@ -61,24 +76,26 @@ function celebrationFor({ streak, ratingsInRow = 0, today, celebrated, atBreak =
 
   const dayTop = highestDayMilestone(streak.current);
   for (let n = 1; n <= dayTop; n++) if (isDayMilestone(n)) keys.push(`${s}:${n}`);
-  if (dayTop && !done(`${s}:${dayTop}`)) due.push({ name: dayName(dayTop), title: `${dayName(dayTop)} of 100% positive ratings` });
+  if (dayTop && !done(`${s}:${dayTop}`)) due.push(dayMilestone(dayTop));
 
   const ratingTop = Math.floor(ratingsInRow / RATINGS_STEP) * RATINGS_STEP;
   for (let n = RATINGS_STEP; n <= ratingTop; n += RATINGS_STEP) keys.push(`${s}:ratings:${n}`);
   if (ratingTop && !done(`${s}:ratings:${ratingTop}`)) {
-    due.push({ name: `${ratingTop} positive ratings in a row`, title: `${ratingTop} positive ratings in a row` });
+    due.push({ name: `${ratingTop} positive ratings in a row`, title: `${ratingTop} positive ratings in a row!` });
   }
 
   if (streak.isNewRecord && streak.current >= 2 * streak.record.length) {
     keys.push(`${s}:double`);
-    if (!done(`${s}:double`)) due.push({ name: "Twice the old record", title: `Twice the old record: ${streak.current} days` });
+    if (!done(`${s}:double`)) due.push({ name: "Twice the old record", title: `Twice the old record: ${streak.current} days!` });
   }
 
   const year = Number(today?.slice(0, 4)) - 1;
   const perfectFrom = atBreak ? `${year + 1}-01-01` : `${year + 1}-01-02`;
   if (today >= perfectFrom && perfectYearPossible(s, year)) {
     keys.push(`perfect:${year}`);
-    if (!done(`perfect:${year}`)) due.push({ name: `Perfect Year ${year}`, title: `Perfect Year ${year}: not one negative rating all year` });
+    if (!done(`perfect:${year}`)) {
+      due.push({ name: calendarName(year), title: `${calendarName(year)}: Exclusively positive ratings`, special: true });
+    }
   }
 
   // The first record post of a streak: the extra special celebration, which
@@ -88,8 +105,10 @@ function celebrationFor({ streak, ratingsInRow = 0, today, celebrated, atBreak =
     return { kind: "record", title: `🏆 NEW RECORD: ${streak.current} days of 100% positive ratings`, keys: [recordKey, ...keys] };
   }
   if (!due.length) return null;
-  const title = due.length === 1 ? `🎉 ${due[0].title}!` : `🎉 ${due.map((d) => d.name).join(" · ")}!`;
-  return { kind: "milestone", title, keys };
+  const special = due.some((d) => d.special);
+  const icon = special ? "🏆" : "🎉";
+  const title = due.length === 1 ? `${icon} ${due[0].title}` : `${icon} ${due.map((d) => d.name).join(" · ")}!`;
+  return { kind: special ? "special" : "milestone", title, keys };
 }
 
 // The next milestones, nearest first, for the tracker line. ratesPerDay: the
@@ -123,15 +142,16 @@ function upcoming({ streak, ratingsInRow = 0, ratesPerDay = 0, today, limit = 3 
   if (perfectYearPossible(streak.since, year)) {
     // Complete at the end of 31 December; counted to 1 January.
     const toGo = daysBetween(today, `${year + 1}-01-01`);
-    list.push({ days: toGo, text: `Perfect Year ${year} ${inDays(toGo)}` });
+    list.push({ days: toGo, text: `${calendarName(year)} ${inDays(toGo)}` });
   }
 
   return list.sort((a, b) => a.days - b.days).slice(0, limit);
 }
 
-// The milestone a preview shows: the next day milestone.
-function nextMilestoneTitle(current) {
-  return `🎉 ${dayName(nextDayMilestone(current))} of 100% positive ratings!`;
+// The milestone a preview shows: the next day milestone, as { kind, title }.
+function nextMilestone(current) {
+  const m = dayMilestone(nextDayMilestone(current));
+  return { kind: m.special ? "special" : "milestone", title: `${m.special ? "🏆" : "🎉"} ${m.title}` };
 }
 
-module.exports = { celebrationFor, upcoming, nextMilestoneTitle, isDayMilestone };
+module.exports = { celebrationFor, upcoming, nextMilestone, isDayMilestone };
